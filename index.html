@@ -19,11 +19,11 @@
   .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:clamp(15px,2vw,20px);font-weight:700}
   .legend span{display:inline-flex;align-items:center;gap:7px}.dot{width:13px;height:13px;border-radius:999px;display:inline-block}.blue{background:var(--blue)}.red{background:var(--red)}
   .stage{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;border-radius:18px;border:1px solid #2b2c31}
-  video,canvas{position:absolute;inset:0;width:100%;height:100%}
-  video{transform:scaleX(-1);object-fit:fill;background:#000}
+  .stage video,.stage canvas{position:absolute;inset:0;width:100%;height:100%}
+  .stage video{transform:scaleX(-1);object-fit:fill;background:#000}
   #playbackVideo{display:none}
   .stage.playback #liveVideo{display:none}.stage.playback #playbackVideo{display:block}
-  canvas{pointer-events:none}
+  .stage canvas{pointer-events:none}
   .hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:12px}
   .hud-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
   .badge{background:rgba(0,0,0,.64);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(7px);border-radius:12px;padding:8px 11px;font-weight:750;font-size:clamp(13px,1.8vw,18px);line-height:1.25}
@@ -41,7 +41,20 @@
   .settings{display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:12px 18px;margin-top:12px}.setting label{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--muted);margin-bottom:5px}.range-hints{display:flex;justify-content:space-between;gap:12px;margin-top:4px;color:#aeb3bd;font-size:12px;font-weight:650}input[type="range"]{width:100%}
   .note{color:var(--muted);font-size:13px;line-height:1.6;margin-top:9px}
   .record-info{margin-top:10px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#111216;border:1px solid var(--line);border-radius:12px;padding:9px 11px;color:var(--muted);font-size:13px}.record-info strong{color:var(--text)}
-  @media(max-width:760px){.app{padding:8px 8px 22px}.stage{border-radius:12px}.settings{grid-template-columns:1fr}.statusline{width:100%;margin-left:0;text-align:left}button{flex:1 1 auto}.hud{padding:8px}.badge{padding:6px 8px}.record-info{grid-template-columns:1fr}}
+  .graphs{display:none;margin-top:14px}
+  .graphs.show{display:block}
+  .graphs-head{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  .graphs-title{font-size:18px;font-weight:850}
+  .graphs-note{font-size:12px;color:var(--muted)}
+  .graph-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+  .graph-card{min-width:0;background:#111216;border:1px solid var(--line);border-radius:13px;padding:8px 9px 7px}
+  .graph-title{font-family:"STIX Two Text","Times New Roman",Times,serif;font-size:20px;font-weight:700;line-height:1;text-align:center;margin:1px 0 5px;letter-spacing:.01em}
+  .graph-title i{font-style:italic}.graph-title sub{font-size:.62em;vertical-align:-.28em;line-height:0}
+  .graph-plot{position:relative;width:100%;height:178px;overflow:hidden;border-radius:7px}
+  .graph-plot canvas{display:block;position:static;width:100%;height:100%;pointer-events:none}
+  .graph-playhead{display:none;position:absolute;top:7px;bottom:22px;width:2px;background:#ffd60a;box-shadow:0 0 0 1px rgba(0,0,0,.32);pointer-events:none;transform:translateX(-1px)}
+  .graphs.playing .graph-playhead,.graphs.paused .graph-playhead{display:block}
+  @media(max-width:760px){.app{padding:8px 8px 22px}.stage{border-radius:12px}.settings{grid-template-columns:1fr}.statusline{width:100%;margin-left:0;text-align:left}button{flex:1 1 auto}.hud{padding:8px}.badge{padding:6px 8px}.record-info{grid-template-columns:1fr}.graph-grid{gap:8px}.graph-card{padding:7px 6px 5px}.graph-title{font-size:18px}.graph-plot{height:145px}}
   @media(prefers-reduced-motion:reduce){.message{transition:none}.rec-dot{animation:none}}
 </style>
 </head>
@@ -76,6 +89,39 @@
     <button class="red" id="stopBtn" disabled>カメラ停止</button>
     <div class="statusline" id="status">未開始</div>
   </div>
+
+  <section class="graphs" id="graphsSection" aria-label="5秒記録の運動グラフ">
+    <div class="graphs-head">
+      <div class="graphs-title">5秒間の運動グラフ</div>
+      <div class="graphs-note">右向き +x ／ 上向き +y　・　各行の左右は同じ縦軸スケール</div>
+    </div>
+    <div class="graph-grid">
+      <article class="graph-card">
+        <div class="graph-title"><i>x</i>–<i>t</i></div>
+        <div class="graph-plot"><canvas id="graphX"></canvas><div class="graph-playhead"></div></div>
+      </article>
+      <article class="graph-card">
+        <div class="graph-title"><i>y</i>–<i>t</i></div>
+        <div class="graph-plot"><canvas id="graphY"></canvas><div class="graph-playhead"></div></div>
+      </article>
+      <article class="graph-card">
+        <div class="graph-title"><i>v</i><sub>x</sub>–<i>t</i></div>
+        <div class="graph-plot"><canvas id="graphVx"></canvas><div class="graph-playhead"></div></div>
+      </article>
+      <article class="graph-card">
+        <div class="graph-title"><i>v</i><sub>y</sub>–<i>t</i></div>
+        <div class="graph-plot"><canvas id="graphVy"></canvas><div class="graph-playhead"></div></div>
+      </article>
+      <article class="graph-card">
+        <div class="graph-title"><i>a</i><sub>x</sub>–<i>t</i></div>
+        <div class="graph-plot"><canvas id="graphAx"></canvas><div class="graph-playhead"></div></div>
+      </article>
+      <article class="graph-card">
+        <div class="graph-title"><i>a</i><sub>y</sub>–<i>t</i></div>
+        <div class="graph-plot"><canvas id="graphAy"></canvas><div class="graph-playhead"></div></div>
+      </article>
+    </div>
+  </section>
 
   <details open>
     <summary>表示・平滑化調整</summary>
@@ -142,6 +188,13 @@ const smoothScale=document.getElementById("smoothScale");
 const vScaleValue=document.getElementById("vScaleValue");
 const aScaleValue=document.getElementById("aScaleValue");
 const smoothScaleValue=document.getElementById("smoothScaleValue");
+const graphsSection=document.getElementById("graphsSection");
+const graphCanvases={
+  x:document.getElementById("graphX"),y:document.getElementById("graphY"),
+  vx:document.getElementById("graphVx"),vy:document.getElementById("graphVy"),
+  ax:document.getElementById("graphAx"),ay:document.getElementById("graphAy")
+};
+const graphPlayheads=[...document.querySelectorAll(".graph-playhead")];
 
 let handLandmarker=null;
 let stream=null;
@@ -269,7 +322,7 @@ function updateRecordUi(){
 
 function clearPreviousRecording(){
   if(playbackUrl){URL.revokeObjectURL(playbackUrl);playbackUrl=null}
-  recordedBlob=null;processedFrames=[];recordSamples=[];recordedDuration=0;lastProcessedStrength=null;playbackVideo.removeAttribute("src");playbackVideo.load();playBtn.disabled=true;pauseBtn.disabled=true;clipInfo.textContent="記録なし"
+  recordedBlob=null;processedFrames=[];recordSamples=[];recordedDuration=0;lastProcessedStrength=null;playbackVideo.removeAttribute("src");playbackVideo.load();playBtn.disabled=true;pauseBtn.disabled=true;clipInfo.textContent="記録なし";graphsSection.classList.remove("show","playing","paused")
 }
 
 function startRecording(){
@@ -294,7 +347,7 @@ async function finalizeRecording(){
   if(mediaChunks.length===0){setStatus("録画データを作れませんでした");return}
   const type=mediaRecorder?.mimeType||mediaChunks[0]?.type||"video/mp4";recordedBlob=new Blob(mediaChunks,{type});playbackUrl=URL.createObjectURL(recordedBlob);playbackVideo.src=playbackUrl;playbackVideo.load();
   try{await waitForMetadata(playbackVideo)}catch(e){console.warn(e)}
-  preparePlaybackData();playBtn.disabled=false;liveBtn.disabled=false;clipInfo.textContent=`記録済み：約 ${recordedDuration.toFixed(1)} 秒 / ${recordSamples.filter(s=>s.valid).length} 点`;setStatus("5秒記録完了。『再生』で録画映像＋平滑化ベクトルを確認できます。");flashMessage("記録完了")
+  preparePlaybackData();renderGraphs();playBtn.disabled=false;liveBtn.disabled=false;clipInfo.textContent=`記録済み：約 ${recordedDuration.toFixed(1)} 秒 / ${recordSamples.filter(s=>s.valid).length} 点`;setStatus("5秒記録完了。『再生』で録画映像＋平滑化ベクトルを確認できます。");flashMessage("記録完了")
 }
 
 function waitForMetadata(v){return new Promise((resolve,reject)=>{if(v.readyState>=1){resolve();return}const ok=()=>{cleanup();resolve()};const ng=()=>{cleanup();reject(new Error("metadata error"))};const cleanup=()=>{v.removeEventListener("loadedmetadata",ok);v.removeEventListener("error",ng)};v.addEventListener("loadedmetadata",ok,{once:true});v.addEventListener("error",ng,{once:true})})}
@@ -347,22 +400,81 @@ function preparePlaybackData(){
   lastProcessedStrength=strength;
 }
 
+function graphSeries(){
+  return processedFrames.map((f,i)=>{
+    if(!f)return null;
+    return{
+      t:i*processedDt,
+      x:f.pos.x-canvas.width/2,
+      y:canvas.height/2-f.pos.y,
+      vx:f.vel.x,
+      vy:-f.vel.y,
+      ax:f.acc.x,
+      ay:-f.acc.y
+    };
+  });
+}
+function niceScale(maxAbs){
+  if(!Number.isFinite(maxAbs)||maxAbs<=0)return 1;
+  const target=maxAbs*1.08,pow=10**Math.floor(Math.log10(target)),n=target/pow;
+  const nice=n<=1?1:n<=2?2:n<=5?5:10;
+  return nice*pow;
+}
+function maxAbsFor(series,keys){
+  let m=0;for(const row of series){if(!row)continue;for(const k of keys){const v=row[k];if(Number.isFinite(v))m=Math.max(m,Math.abs(v))}}return m;
+}
+function formatGraphNumber(v){
+  const a=Math.abs(v);if(a>=1000)return `${(v/1000).toFixed(a>=10000?0:1)}k`;if(a>=100)return v.toFixed(0);if(a>=10)return v.toFixed(1);return v.toFixed(2);
+}
+function sizeGraphCanvas(c){
+  const dpr=Math.min(window.devicePixelRatio||1,2),w=Math.max(160,c.clientWidth),h=Math.max(110,c.clientHeight);
+  const rw=Math.round(w*dpr),rh=Math.round(h*dpr);if(c.width!==rw||c.height!==rh){c.width=rw;c.height=rh}const g=c.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);return{g,w,h};
+}
+function drawGraph(c,series,key,scale,unit,color){
+  const {g,w,h}=sizeGraphCanvas(c);g.clearRect(0,0,w,h);g.fillStyle="#0d0e11";g.fillRect(0,0,w,h);
+  const M={l:43,r:10,t:12,b:25},pw=Math.max(1,w-M.l-M.r),ph=Math.max(1,h-M.t-M.b),tMax=Math.max(.1,recordedDuration||RECORD_SECONDS);
+  const X=t=>M.l+clamp(t/tMax,0,1)*pw,Y=v=>M.t+(scale-v)/(2*scale)*ph;
+  g.font='11px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';g.textBaseline="middle";
+  g.strokeStyle="#262932";g.lineWidth=1;
+  for(let s=0;s<=Math.ceil(tMax);s++){const x=X(Math.min(s,tMax));g.beginPath();g.moveTo(x,M.t);g.lineTo(x,M.t+ph);g.stroke();g.fillStyle="#8f949e";g.textAlign="center";g.fillText(String(s),x,h-9)}
+  for(const q of [-1,-.5,0,.5,1]){const y=Y(q*scale);g.beginPath();g.moveTo(M.l,y);g.lineTo(M.l+pw,y);g.stroke()}
+  g.strokeStyle="#727782";g.lineWidth=1.2;g.beginPath();g.moveTo(M.l,Y(0));g.lineTo(M.l+pw,Y(0));g.stroke();
+  g.fillStyle="#aeb3bd";g.textAlign="right";g.fillText(formatGraphNumber(scale),M.l-5,Y(scale));g.fillText("0",M.l-5,Y(0));g.fillText(formatGraphNumber(-scale),M.l-5,Y(-scale));
+  g.textAlign="right";g.textBaseline="top";g.fillStyle="#aeb3bd";g.fillText(`±${formatGraphNumber(scale)} ${unit}`,w-M.r,M.t+2);
+  g.textAlign="right";g.textBaseline="alphabetic";g.fillText("t (s)",w-M.r,h-4);
+  g.strokeStyle=color;g.lineWidth=2.4;g.lineJoin="round";g.lineCap="round";let started=false;g.beginPath();
+  for(const row of series){if(!row||!Number.isFinite(row[key])){started=false;continue}const x=X(row.t),y=Y(clamp(row[key],-scale,scale));if(!started){g.moveTo(x,y);started=true}else g.lineTo(x,y)}g.stroke();
+}
+function renderGraphs(){
+  if(!recordedBlob||!processedFrames.length)return;
+  const series=graphSeries();
+  const pScale=niceScale(maxAbsFor(series,["x","y"])),vScaleG=niceScale(maxAbsFor(series,["vx","vy"])),aScaleG=niceScale(maxAbsFor(series,["ax","ay"]));
+  drawGraph(graphCanvases.x,series,"x",pScale,"px","#f2f2f3");drawGraph(graphCanvases.y,series,"y",pScale,"px","#f2f2f3");
+  drawGraph(graphCanvases.vx,series,"vx",vScaleG,"px/s","#1683ff");drawGraph(graphCanvases.vy,series,"vy",vScaleG,"px/s","#1683ff");
+  drawGraph(graphCanvases.ax,series,"ax",aScaleG,"px/s²","#ff3b30");drawGraph(graphCanvases.ay,series,"ay",aScaleG,"px/s²","#ff3b30");
+  graphsSection.classList.add("show");updateGraphPlayheads(playbackVideo.currentTime||0);
+}
+function updateGraphPlayheads(t){
+  if(!recordedBlob)return;const tMax=Math.max(.1,recordedDuration||RECORD_SECONDS),frac=clamp(t/tMax,0,1);
+  for(const el of graphPlayheads){const plot=el.parentElement,w=plot.clientWidth,Ml=43,Mr=10;el.style.left=`${Ml+frac*Math.max(1,w-Ml-Mr)}px`}
+}
+
 function playbackFrameAt(t){
   if(!processedFrames.length)return null;const f=clamp(t/processedDt,0,processedFrames.length-1),i=Math.floor(f),j=Math.min(processedFrames.length-1,i+1),u=f-i,a=processedFrames[i],b=processedFrames[j];if(!a||!b)return a||b||null;
   return{pos:lerpPoint(a.pos,b.pos,u),vel:lerpPoint(a.vel,b.vel,u),acc:lerpPoint(a.acc,b.acc,u)}
 }
-function drawPlaybackFrame(){const f=playbackFrameAt(playbackVideo.currentTime||0);if(f)drawVectors(f.pos,f.vel,f.acc);else ctx.clearRect(0,0,canvas.width,canvas.height)}
+function drawPlaybackFrame(){const t=playbackVideo.currentTime||0;const f=playbackFrameAt(t);if(f)drawVectors(f.pos,f.vel,f.acc);else ctx.clearRect(0,0,canvas.width,canvas.height);updateGraphPlayheads(t)}
 
 async function playRecording(){
   if(!recordedBlob)return;if(lastProcessedStrength!==Number(smoothScale.value))preparePlaybackData();
-  mode="playback";stage.classList.add("playback");liveBtn.disabled=false;pauseBtn.disabled=false;recordBtn.disabled=true;
+  mode="playback";stage.classList.add("playback");graphsSection.classList.add("playing");graphsSection.classList.remove("paused");liveBtn.disabled=false;pauseBtn.disabled=false;recordBtn.disabled=true;
   if(!rafId)loop();
   if(playbackVideo.ended||playbackVideo.currentTime>=Math.max(0,(playbackVideo.duration||recordedDuration)-.04))playbackVideo.currentTime=0;
   try{await playbackVideo.play();setStatus(`録画再生中：平滑化 ${smoothScale.value}%`)}catch(e){console.error(e);setStatus("再生を開始できませんでした")}
 }
-function pausePlayback(){if(!recordedBlob)return;playbackVideo.pause();mode="playbackPaused";pauseBtn.disabled=true;setStatus(`一時停止 ${playbackVideo.currentTime.toFixed(1)} s`);drawPlaybackFrame()}
+function pausePlayback(){if(!recordedBlob)return;playbackVideo.pause();mode="playbackPaused";graphsSection.classList.remove("playing");graphsSection.classList.add("paused");pauseBtn.disabled=true;setStatus(`一時停止 ${playbackVideo.currentTime.toFixed(1)} s`);drawPlaybackFrame()}
 function switchToLive(reset=true){
-  playbackVideo.pause();mode="live";stage.classList.remove("playback");pauseBtn.disabled=true;liveBtn.disabled=true;if(running){recordBtn.disabled=false;setStatus("ライブ表示");if(reset)resetMotion()}ctx.clearRect(0,0,canvas.width,canvas.height)
+  playbackVideo.pause();mode="live";stage.classList.remove("playback");graphsSection.classList.remove("playing","paused");pauseBtn.disabled=true;liveBtn.disabled=true;if(running){recordBtn.disabled=false;setStatus("ライブ表示");if(reset)resetMotion()}ctx.clearRect(0,0,canvas.width,canvas.height)
 }
 
 function loop(){
@@ -383,12 +495,13 @@ function loop(){
 }
 
 startBtn.addEventListener("click",startCamera);recordBtn.addEventListener("click",startRecording);playBtn.addEventListener("click",playRecording);pauseBtn.addEventListener("click",pausePlayback);liveBtn.addEventListener("click",()=>switchToLive(true));toggleBtn.addEventListener("click",toggleAcceleration);stopBtn.addEventListener("click",stopCamera);
-playbackVideo.addEventListener("ended",()=>{mode="playbackPaused";pauseBtn.disabled=true;setStatus("再生終了。『再生』でもう一度見られます。");drawPlaybackFrame()});
+playbackVideo.addEventListener("ended",()=>{mode="playbackPaused";graphsSection.classList.remove("playing");graphsSection.classList.add("paused");pauseBtn.disabled=true;setStatus("再生終了。『再生』でもう一度見られます。");drawPlaybackFrame()});
 playbackVideo.addEventListener("pause",()=>{if(mode==="playback")pauseBtn.disabled=true});
 playbackVideo.addEventListener("play",()=>{pauseBtn.disabled=false});
 vScale.addEventListener("input",()=>{vScaleValue.textContent=Number(vScale.value).toFixed(2)});
 aScale.addEventListener("input",()=>{aScaleValue.textContent=Number(aScale.value).toFixed(2)});
-smoothScale.addEventListener("input",()=>{smoothScaleValue.textContent=`${Number(smoothScale.value)}%`;if(recordedBlob){preparePlaybackData();if(mode!=="live")drawPlaybackFrame()}});
+smoothScale.addEventListener("input",()=>{smoothScaleValue.textContent=`${Number(smoothScale.value)}%`;if(recordedBlob){preparePlaybackData();renderGraphs();if(mode!=="live")drawPlaybackFrame()}});
+let graphResizeTimer=null;window.addEventListener("resize",()=>{if(!recordedBlob)return;clearTimeout(graphResizeTimer);graphResizeTimer=setTimeout(renderGraphs,100)});
 window.addEventListener("pagehide",()=>{if(playbackUrl)URL.revokeObjectURL(playbackUrl);if(stream){for(const t of stream.getTracks())t.stop()}});
 
 updateAccelBadge();
