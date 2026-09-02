@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111111">
-<title>手の速度・加速度ベクトル記録</title>
+<title>手のひらの速度・加速度</title>
 <style>
   :root{
     color-scheme:dark;
@@ -62,7 +62,7 @@
 <body>
 <main class="app">
   <div class="topbar">
-    <div class="title">手の速度・加速度ベクトル</div>
+    <div class="title">手のひらの速度・加速度</div>
     <div class="legend"><span><i class="dot blue"></i>速度 v</span><span><i class="dot red"></i>加速度 a</span></div>
   </div>
 
@@ -84,6 +84,7 @@
     <button id="startBtn">カメラ開始</button>
     <button class="record" id="recordBtn" disabled>● 5秒記録</button>
     <button class="play" id="playBtn" disabled>▶ 再生</button>
+    <button class="play" id="slowPlayBtn" disabled>🐢 スロー再生</button>
     <button class="secondary" id="pauseBtn" disabled>⏸ 一時停止</button>
     <button class="secondary" id="liveBtn" disabled>ライブに戻る</button>
     <button class="secondary" id="toggleBtn" disabled>加速度 ON / OFF</button>
@@ -164,6 +165,7 @@ const stage=document.getElementById("stage");
 const startBtn=document.getElementById("startBtn");
 const recordBtn=document.getElementById("recordBtn");
 const playBtn=document.getElementById("playBtn");
+const slowPlayBtn=document.getElementById("slowPlayBtn");
 const pauseBtn=document.getElementById("pauseBtn");
 const liveBtn=document.getElementById("liveBtn");
 const toggleBtn=document.getElementById("toggleBtn");
@@ -233,7 +235,7 @@ function flashMessage(t){clearTimeout(messageTimer);message.classList.remove("co
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 async function runRecordCountdown(){
   countingDown=true;
-  recordBtn.disabled=true;playBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;
+  recordBtn.disabled=true;playBtn.disabled=true;slowPlayBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;
   clearTimeout(messageTimer);
   for(let n=3;n>=1;n--){
     if(!running||!stream){countingDown=false;message.classList.remove("show","countdown");return false}
@@ -329,7 +331,7 @@ function updateRecordUi(){
 
 function clearPreviousRecording(){
   if(playbackUrl){URL.revokeObjectURL(playbackUrl);playbackUrl=null}
-  recordedBlob=null;processedFrames=[];recordSamples=[];recordedDuration=0;lastProcessedStrength=null;playbackVideo.removeAttribute("src");playbackVideo.load();playBtn.disabled=true;pauseBtn.disabled=true;clipInfo.textContent="記録なし";graphsSection.classList.remove("show","playing","paused")
+  recordedBlob=null;processedFrames=[];recordSamples=[];recordedDuration=0;lastProcessedStrength=null;playbackVideo.removeAttribute("src");playbackVideo.load();playBtn.disabled=true;slowPlayBtn.disabled=true;pauseBtn.disabled=true;clipInfo.textContent="記録なし";graphsSection.classList.remove("show","playing","paused")
 }
 
 async function startRecording(){
@@ -343,7 +345,7 @@ async function startRecording(){
   mediaRecorder.onerror=e=>{console.error(e);finishRecordingUi();setStatus("録画中にエラーが発生しました")};
   mediaRecorder.onstop=finalizeRecording;
   try{mediaRecorder.start(200)}catch(e){console.error(e);setStatus("録画を開始できませんでした");recordBtn.disabled=!running;stopBtn.disabled=!running;return}
-  recordStartPerf=performance.now();recording=true;recordBadge.classList.add("show");recordProgress.style.width="0%";recordBtn.disabled=true;playBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;flashMessage("記録開始");updateRecordUi();
+  recordStartPerf=performance.now();recording=true;recordBadge.classList.add("show");recordProgress.style.width="0%";recordBtn.disabled=true;playBtn.disabled=true;slowPlayBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;flashMessage("記録開始");updateRecordUi();
   recordStopTimer=setTimeout(()=>{if(mediaRecorder&&mediaRecorder.state!=="inactive")mediaRecorder.stop()},RECORD_SECONDS*1000);
 }
 
@@ -356,7 +358,7 @@ async function finalizeRecording(){
   if(mediaChunks.length===0){setStatus("録画データを作れませんでした");return}
   const type=mediaRecorder?.mimeType||mediaChunks[0]?.type||"video/mp4";recordedBlob=new Blob(mediaChunks,{type});playbackUrl=URL.createObjectURL(recordedBlob);playbackVideo.src=playbackUrl;playbackVideo.load();
   try{await waitForMetadata(playbackVideo)}catch(e){console.warn(e)}
-  preparePlaybackData();renderGraphs();playBtn.disabled=false;liveBtn.disabled=false;clipInfo.textContent=`記録済み：約 ${recordedDuration.toFixed(1)} 秒 / ${recordSamples.filter(s=>s.valid).length} 点`;setStatus("5秒記録完了。『再生』で録画映像＋平滑化ベクトルを確認できます。");flashMessage("記録完了")
+  preparePlaybackData();renderGraphs();playBtn.disabled=false;slowPlayBtn.disabled=false;liveBtn.disabled=false;clipInfo.textContent=`記録済み：約 ${recordedDuration.toFixed(1)} 秒 / ${recordSamples.filter(s=>s.valid).length} 点`;setStatus("5秒記録完了。『再生』で録画映像＋平滑化ベクトルを確認できます。");flashMessage("記録完了")
 }
 
 function waitForMetadata(v){return new Promise((resolve,reject)=>{if(v.readyState>=1){resolve();return}const ok=()=>{cleanup();resolve()};const ng=()=>{cleanup();reject(new Error("metadata error"))};const cleanup=()=>{v.removeEventListener("loadedmetadata",ok);v.removeEventListener("error",ng)};v.addEventListener("loadedmetadata",ok,{once:true});v.addEventListener("error",ng,{once:true})})}
@@ -475,12 +477,14 @@ function playbackFrameAt(t){
 }
 function drawPlaybackFrame(){const t=playbackVideo.currentTime||0;const f=playbackFrameAt(t);if(f)drawVectors(f.pos,f.vel,f.acc);else ctx.clearRect(0,0,canvas.width,canvas.height);updateGraphPlayheads(t)}
 
-async function playRecording(){
+async function playRecording(rate=1){
   if(!recordedBlob)return;if(lastProcessedStrength!==Number(smoothScale.value))preparePlaybackData();
+  const playbackRate=rate===0.25?0.25:1;
+  playbackVideo.playbackRate=playbackRate;
   mode="playback";stage.classList.add("playback");graphsSection.classList.add("playing");graphsSection.classList.remove("paused");liveBtn.disabled=false;pauseBtn.disabled=false;recordBtn.disabled=true;
   if(!rafId)loop();
   if(playbackVideo.ended||playbackVideo.currentTime>=Math.max(0,(playbackVideo.duration||recordedDuration)-.04))playbackVideo.currentTime=0;
-  try{await playbackVideo.play();setStatus(`録画再生中：平滑化 ${smoothScale.value}%`)}catch(e){console.error(e);setStatus("再生を開始できませんでした")}
+  try{await playbackVideo.play();setStatus(playbackRate===1?`録画再生中：平滑化 ${smoothScale.value}%`:`スロー再生中（0.25倍）：平滑化 ${smoothScale.value}%`)}catch(e){console.error(e);setStatus("再生を開始できませんでした")}
 }
 function pausePlayback(){if(!recordedBlob)return;playbackVideo.pause();mode="playbackPaused";graphsSection.classList.remove("playing");graphsSection.classList.add("paused");pauseBtn.disabled=true;setStatus(`一時停止 ${playbackVideo.currentTime.toFixed(1)} s`);drawPlaybackFrame()}
 function switchToLive(reset=true){
@@ -504,7 +508,7 @@ function loop(){
   rafId=requestAnimationFrame(loop)
 }
 
-startBtn.addEventListener("click",startCamera);recordBtn.addEventListener("click",startRecording);playBtn.addEventListener("click",playRecording);pauseBtn.addEventListener("click",pausePlayback);liveBtn.addEventListener("click",()=>switchToLive(true));toggleBtn.addEventListener("click",toggleAcceleration);stopBtn.addEventListener("click",stopCamera);
+startBtn.addEventListener("click",startCamera);recordBtn.addEventListener("click",startRecording);playBtn.addEventListener("click",()=>playRecording(1));slowPlayBtn.addEventListener("click",()=>playRecording(0.25));pauseBtn.addEventListener("click",pausePlayback);liveBtn.addEventListener("click",()=>switchToLive(true));toggleBtn.addEventListener("click",toggleAcceleration);stopBtn.addEventListener("click",stopCamera);
 playbackVideo.addEventListener("ended",()=>{mode="playbackPaused";graphsSection.classList.remove("playing");graphsSection.classList.add("paused");pauseBtn.disabled=true;setStatus("再生終了。『再生』でもう一度見られます。");drawPlaybackFrame()});
 playbackVideo.addEventListener("pause",()=>{if(mode==="playback")pauseBtn.disabled=true});
 playbackVideo.addEventListener("play",()=>{pauseBtn.disabled=false});
