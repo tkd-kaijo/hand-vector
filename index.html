@@ -448,7 +448,10 @@ function drawGraph(c,series,key,scale,unit,color){
   for(let s=0;s<=Math.ceil(tMax);s++){const x=X(Math.min(s,tMax));g.beginPath();g.moveTo(x,M.t);g.lineTo(x,M.t+ph);g.stroke();g.fillStyle="#8f949e";g.textAlign="center";g.fillText(String(s),x,h-9)}
   for(const q of [-1,-.5,0,.5,1]){const y=Y(q*scale);g.beginPath();g.moveTo(M.l,y);g.lineTo(M.l+pw,y);g.stroke()}
   g.strokeStyle="#727782";g.lineWidth=2.4;g.beginPath();g.moveTo(M.l,Y(0));g.lineTo(M.l+pw,Y(0));g.stroke();
-  g.fillStyle="#aeb3bd";g.textAlign="right";g.fillText(formatGraphNumber(scale),M.l-5,Y(scale));g.save();g.font='33px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';g.fillText("0",M.l-5,Y(0));g.restore();g.fillText(formatGraphNumber(-scale),M.l-5,Y(-scale));
+  g.fillStyle="#aeb3bd";g.textAlign="right";g.fillText(formatGraphNumber(scale),M.l-5,Y(scale));
+  const graphTitle=c.closest(".graph-card")?.querySelector(".graph-title");
+  const zeroFontSize=graphTitle ? getComputedStyle(graphTitle).fontSize : "40px";
+  g.save();g.font=`${zeroFontSize} -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif`;g.fillText("0",M.l-5,Y(0));g.restore();g.fillText(formatGraphNumber(-scale),M.l-5,Y(-scale));
   g.textAlign="right";g.textBaseline="top";g.fillStyle="#aeb3bd";g.fillText(`±${formatGraphNumber(scale)} ${unit}`,w-M.r,M.t+2);
   g.textAlign="right";g.textBaseline="alphabetic";g.fillText("t (s)",w-M.r,h-4);
   g.strokeStyle=color;g.lineWidth=2.4;g.lineJoin="round";g.lineCap="round";let started=false;g.beginPath();
