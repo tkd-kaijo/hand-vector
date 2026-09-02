@@ -88,7 +88,7 @@
     <button class="secondary" id="pauseBtn" disabled>⏸ 一時停止</button>
     <button class="secondary" id="liveBtn" disabled>ライブに戻る</button>
     <button class="secondary" id="toggleBtn" disabled>加速度 ON / OFF</button>
-    <button class="red" id="stopBtn" disabled>カメラ停止</button>
+    <button class="secondary" id="axesBtn" aria-pressed="false">xy軸表示 ON/OFF</button>
     <div class="statusline" id="status">未開始</div>
   </div>
 
@@ -169,7 +169,7 @@ const slowPlayBtn=document.getElementById("slowPlayBtn");
 const pauseBtn=document.getElementById("pauseBtn");
 const liveBtn=document.getElementById("liveBtn");
 const toggleBtn=document.getElementById("toggleBtn");
-const stopBtn=document.getElementById("stopBtn");
+const axesBtn=document.getElementById("axesBtn");
 const statusEl=document.getElementById("status");
 const accelBadge=document.getElementById("accelBadge");
 const message=document.getElementById("message");
@@ -198,6 +198,7 @@ let rafId=null;
 let lastInferenceMs=0;
 let lastVideoTime=-1;
 let showAcceleration=true;
+let showAxes=false;
 let messageTimer=null;
 let mode="live";
 
@@ -235,7 +236,7 @@ function flashMessage(t){clearTimeout(messageTimer);message.classList.remove("co
 function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
 async function runRecordCountdown(){
   countingDown=true;
-  recordBtn.disabled=true;playBtn.disabled=true;slowPlayBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;
+  recordBtn.disabled=true;playBtn.disabled=true;slowPlayBtn.disabled=true;liveBtn.disabled=true;
   clearTimeout(messageTimer);
   for(let n=3;n>=1;n--){
     if(!running||!stream){countingDown=false;message.classList.remove("show","countdown");return false}
@@ -282,8 +283,49 @@ function drawArrow(start,vec,color,label,minLen=7){
   ctx.beginPath();ctx.moveTo(end.x,end.y);ctx.lineTo(end.x-head*Math.cos(angle-Math.PI/7),end.y-head*Math.sin(angle-Math.PI/7));ctx.lineTo(end.x-head*Math.cos(angle+Math.PI/7),end.y-head*Math.sin(angle+Math.PI/7));ctx.closePath();ctx.fill();
   const fs=Math.max(22,Math.min(40,canvas.width/34));ctx.font=`900 ${fs}px -apple-system,BlinkMacSystemFont,sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineWidth=7;ctx.strokeStyle="rgba(0,0,0,.8)";const tx=end.x+Math.cos(angle)*24,ty=end.y+Math.sin(angle)*24;ctx.strokeText(label,tx,ty);ctx.fillStyle=color;ctx.fillText(label,tx,ty);ctx.restore();
 }
+function drawAxesOverlay(){
+  if(!showAxes)return;
+  const w=canvas.width,h=canvas.height,cx=w/2,cy=h/2;
+  const inset=Math.max(34,Math.min(w,h)*0.055);
+  const x0=inset,x1=w-inset,y0=h-inset,y1=inset;
+  const mainWidth=Math.max(6,Math.min(13,w/115));
+  const outlineWidth=mainWidth+Math.max(5,mainWidth*.8);
+  const head=Math.max(22,Math.min(48,Math.min(w,h)*0.06));
+  const labelSize=Math.max(34,Math.min(66,w/20));
+  function strokeLine(xa,ya,xb,yb,width,color){
+    ctx.beginPath();ctx.moveTo(xa,ya);ctx.lineTo(xb,yb);ctx.lineWidth=width;ctx.lineCap="round";ctx.strokeStyle=color;ctx.stroke();
+  }
+  function arrowHead(x,y,angle,size,width,color){
+    ctx.beginPath();ctx.moveTo(x,y);
+    ctx.lineTo(x-size*Math.cos(angle-Math.PI/6),y-size*Math.sin(angle-Math.PI/6));
+    ctx.moveTo(x,y);
+    ctx.lineTo(x-size*Math.cos(angle+Math.PI/6),y-size*Math.sin(angle+Math.PI/6));
+    ctx.lineWidth=width;ctx.lineCap="round";ctx.lineJoin="round";ctx.strokeStyle=color;ctx.stroke();
+  }
+  ctx.save();
+  strokeLine(x0,cy,x1,cy,outlineWidth,"rgba(0,0,0,.84)");
+  strokeLine(cx,y0,cx,y1,outlineWidth,"rgba(0,0,0,.84)");
+  arrowHead(x1,cy,0,head,outlineWidth,"rgba(0,0,0,.84)");
+  arrowHead(cx,y1,-Math.PI/2,head,outlineWidth,"rgba(0,0,0,.84)");
+  strokeLine(x0,cy,x1,cy,mainWidth,"rgba(255,255,255,.97)");
+  strokeLine(cx,y0,cx,y1,mainWidth,"rgba(255,255,255,.97)");
+  arrowHead(x1,cy,0,head,mainWidth,"rgba(255,255,255,.97)");
+  arrowHead(cx,y1,-Math.PI/2,head,mainWidth,"rgba(255,255,255,.97)");
+  ctx.font=`italic 900 ${labelSize}px "Times New Roman",Times,serif`;
+  ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineJoin="round";
+  ctx.lineWidth=Math.max(7,labelSize*.15);ctx.strokeStyle="rgba(0,0,0,.92)";ctx.fillStyle="#fff";
+  const lx=x1-head*.35,ly=cy-labelSize*.72;
+  const yx=cx+labelSize*.70,yy=y1+head*.55;
+  ctx.strokeText("x",lx,ly);ctx.fillText("x",lx,ly);
+  ctx.strokeText("y",yx,yy);ctx.fillText("y",yx,yy);
+  ctx.font=`800 ${Math.max(24,labelSize*.58)}px -apple-system,BlinkMacSystemFont,sans-serif`;
+  ctx.lineWidth=Math.max(5,labelSize*.10);
+  ctx.strokeText("O",cx-labelSize*.46,cy+labelSize*.52);ctx.fillText("O",cx-labelSize*.46,cy+labelSize*.52);
+  ctx.restore();
+}
+
 function drawVectors(pos,vel,acc){
-  ctx.clearRect(0,0,canvas.width,canvas.height);if(!pos)return;
+  ctx.clearRect(0,0,canvas.width,canvas.height);drawAxesOverlay();if(!pos)return;
   ctx.save();ctx.beginPath();ctx.arc(pos.x,pos.y,10,0,Math.PI*2);ctx.fillStyle="rgba(255,255,255,.95)";ctx.fill();ctx.lineWidth=3;ctx.strokeStyle="rgba(0,0,0,.75)";ctx.stroke();ctx.restore();
   const vv={x:vel.x*V_ARROW_TIME*Number(vScale.value),y:vel.y*V_ARROW_TIME*Number(vScale.value)};drawArrow(pos,vv,"#1683ff","v",8);
   if(showAcceleration){const aa={x:acc.x*A_ARROW_TIME2*Number(aScale.value),y:acc.y*A_ARROW_TIME2*Number(aScale.value)};drawArrow(pos,aa,"#ff3b30","a",9)}
@@ -305,16 +347,9 @@ async function startCamera(){
     liveVideo.srcObject=stream;await liveVideo.play();
     canvas.width=liveVideo.videoWidth||1280;canvas.height=liveVideo.videoHeight||720;stage.style.aspectRatio=`${canvas.width} / ${canvas.height}`;
     running=true;mode="live";stage.classList.remove("playback");resetMotion();
-    startBtn.textContent="カメラ動作中";recordBtn.disabled=!supportsMediaRecording();toggleBtn.disabled=false;stopBtn.disabled=false;liveBtn.disabled=true;
+    startBtn.textContent="カメラ動作中";recordBtn.disabled=!supportsMediaRecording();toggleBtn.disabled=false;liveBtn.disabled=true;
     setStatus(supportsMediaRecording()?"手を追跡中":"このブラウザは映像記録に未対応です");loop();
   }catch(e){console.error(e);setStatus("カメラを開始できません。Safari/Chromeのカメラ許可を確認してください。");startBtn.disabled=false}
-}
-
-function stopCamera(){
-  if(recording||countingDown)return;
-  running=false;if(rafId)cancelAnimationFrame(rafId);rafId=null;
-  if(stream){for(const t of stream.getTracks())t.stop();stream=null}
-  liveVideo.srcObject=null;resetMotion();startBtn.disabled=false;startBtn.textContent="カメラ開始";recordBtn.disabled=true;toggleBtn.disabled=true;stopBtn.disabled=true;liveBtn.disabled=recordedBlob===null;setStatus("カメラ停止中。記録済み映像は再生できます。")
 }
 
 function supportsMediaRecording(){return typeof MediaRecorder!=="undefined"&&!!stream}
@@ -338,19 +373,19 @@ async function startRecording(){
   if(!running||!stream||recording||countingDown||!supportsMediaRecording())return;
   switchToLive(false);clearPreviousRecording();
   const ready=await runRecordCountdown();
-  if(!ready){recordBtn.disabled=!running;stopBtn.disabled=!running;return}
+  if(!ready){recordBtn.disabled=!running;return}
   const mime=chooseMimeType();const options={videoBitsPerSecond:2500000};if(mime)options.mimeType=mime;
-  try{mediaRecorder=new MediaRecorder(stream,options)}catch(e){console.error(e);setStatus("このブラウザでは録画形式を開始できませんでした");recordBtn.disabled=!running;stopBtn.disabled=!running;return}
+  try{mediaRecorder=new MediaRecorder(stream,options)}catch(e){console.error(e);setStatus("このブラウザでは録画形式を開始できませんでした");recordBtn.disabled=!running;return}
   mediaChunks=[];recordSamples=[];mediaRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)mediaChunks.push(e.data)};
   mediaRecorder.onerror=e=>{console.error(e);finishRecordingUi();setStatus("録画中にエラーが発生しました")};
   mediaRecorder.onstop=finalizeRecording;
-  try{mediaRecorder.start(200)}catch(e){console.error(e);setStatus("録画を開始できませんでした");recordBtn.disabled=!running;stopBtn.disabled=!running;return}
-  recordStartPerf=performance.now();recording=true;recordBadge.classList.add("show");recordProgress.style.width="0%";recordBtn.disabled=true;playBtn.disabled=true;slowPlayBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;flashMessage("記録開始");updateRecordUi();
+  try{mediaRecorder.start(200)}catch(e){console.error(e);setStatus("録画を開始できませんでした");recordBtn.disabled=!running;return}
+  recordStartPerf=performance.now();recording=true;recordBadge.classList.add("show");recordProgress.style.width="0%";recordBtn.disabled=true;playBtn.disabled=true;slowPlayBtn.disabled=true;liveBtn.disabled=true;flashMessage("記録開始");updateRecordUi();
   recordStopTimer=setTimeout(()=>{if(mediaRecorder&&mediaRecorder.state!=="inactive")mediaRecorder.stop()},RECORD_SECONDS*1000);
 }
 
 function finishRecordingUi(){
-  recording=false;clearTimeout(recordStopTimer);recordStopTimer=null;if(recordUiRaf)cancelAnimationFrame(recordUiRaf);recordUiRaf=null;recordBadge.classList.remove("show");recordProgress.style.width="0%";recordBtn.disabled=!running;stopBtn.disabled=!running
+  recording=false;clearTimeout(recordStopTimer);recordStopTimer=null;if(recordUiRaf)cancelAnimationFrame(recordUiRaf);recordUiRaf=null;recordBadge.classList.remove("show");recordProgress.style.width="0%";recordBtn.disabled=!running
 }
 
 async function finalizeRecording(){
@@ -475,7 +510,7 @@ function playbackFrameAt(t){
   if(!processedFrames.length)return null;const f=clamp(t/processedDt,0,processedFrames.length-1),i=Math.floor(f),j=Math.min(processedFrames.length-1,i+1),u=f-i,a=processedFrames[i],b=processedFrames[j];if(!a||!b)return a||b||null;
   return{pos:lerpPoint(a.pos,b.pos,u),vel:lerpPoint(a.vel,b.vel,u),acc:lerpPoint(a.acc,b.acc,u)}
 }
-function drawPlaybackFrame(){const t=playbackVideo.currentTime||0;const f=playbackFrameAt(t);if(f)drawVectors(f.pos,f.vel,f.acc);else ctx.clearRect(0,0,canvas.width,canvas.height);updateGraphPlayheads(t)}
+function drawPlaybackFrame(){const t=playbackVideo.currentTime||0;const f=playbackFrameAt(t);if(f)drawVectors(f.pos,f.vel,f.acc);else{ctx.clearRect(0,0,canvas.width,canvas.height);drawAxesOverlay()}updateGraphPlayheads(t)}
 
 async function playRecording(rate=1){
   if(!recordedBlob)return;if(lastProcessedStrength!==Number(smoothScale.value))preparePlaybackData();
@@ -508,7 +543,8 @@ function loop(){
   rafId=requestAnimationFrame(loop)
 }
 
-startBtn.addEventListener("click",startCamera);recordBtn.addEventListener("click",startRecording);playBtn.addEventListener("click",()=>playRecording(1));slowPlayBtn.addEventListener("click",()=>playRecording(0.25));pauseBtn.addEventListener("click",pausePlayback);liveBtn.addEventListener("click",()=>switchToLive(true));toggleBtn.addEventListener("click",toggleAcceleration);stopBtn.addEventListener("click",stopCamera);
+startBtn.addEventListener("click",startCamera);recordBtn.addEventListener("click",startRecording);playBtn.addEventListener("click",()=>playRecording(1));slowPlayBtn.addEventListener("click",()=>playRecording(0.25));pauseBtn.addEventListener("click",pausePlayback);liveBtn.addEventListener("click",()=>switchToLive(true));toggleBtn.addEventListener("click",toggleAcceleration);
+axesBtn.addEventListener("click",()=>{showAxes=!showAxes;axesBtn.setAttribute("aria-pressed",showAxes?"true":"false");flashMessage(showAxes?"xy軸 ON":"xy軸 OFF");if(mode==="live")drawLiveFrame();else drawPlaybackFrame()});
 playbackVideo.addEventListener("ended",()=>{mode="playbackPaused";graphsSection.classList.remove("playing");graphsSection.classList.add("paused");pauseBtn.disabled=true;setStatus("再生終了。『再生』でもう一度見られます。");drawPlaybackFrame()});
 playbackVideo.addEventListener("pause",()=>{if(mode==="playback")pauseBtn.disabled=true});
 playbackVideo.addEventListener("play",()=>{pauseBtn.disabled=false});
