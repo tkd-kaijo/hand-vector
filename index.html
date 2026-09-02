@@ -4,648 +4,392 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#111111">
-<title>手の速度・加速度ベクトル</title>
+<title>手の速度・加速度ベクトル記録</title>
 <style>
   :root{
-    color-scheme: dark;
-    --bg:#0b0b0c;
-    --panel:#17181b;
-    --text:#f5f5f5;
-    --muted:#b5b7bd;
-    --line:#31333a;
-    --blue:#1683ff;
-    --red:#ff3b30;
+    color-scheme:dark;
+    --bg:#0b0b0c;--panel:#17181b;--text:#f5f5f5;--muted:#b5b7bd;--line:#31333a;
+    --blue:#1683ff;--red:#ff3b30;--rec:#ff453a;
   }
   *{box-sizing:border-box}
-  body{
-    margin:0;
-    background:var(--bg);
-    color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;
-  }
-  .app{
-    width:min(1100px,100%);
-    margin:0 auto;
-    padding:12px 12px 28px;
-  }
-  .topbar{
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    gap:12px;
-    flex-wrap:wrap;
-    margin-bottom:10px;
-  }
-  .title{
-    font-size:clamp(20px,3vw,30px);
-    font-weight:800;
-    letter-spacing:.01em;
-  }
-  .legend{
-    display:flex;
-    gap:14px;
-    flex-wrap:wrap;
-    align-items:center;
-    font-size:clamp(15px,2vw,20px);
-    font-weight:700;
-  }
-  .legend span{display:inline-flex;align-items:center;gap:7px}
-  .dot{width:13px;height:13px;border-radius:999px;display:inline-block}
-  .blue{background:var(--blue)}
-  .red{background:var(--red)}
-
-  .stage{
-    position:relative;
-    width:100%;
-    aspect-ratio:16/9;
-    background:#000;
-    overflow:hidden;
-    border-radius:18px;
-    border:1px solid #2b2c31;
-  }
-  video,canvas{
-    position:absolute;
-    inset:0;
-    width:100%;
-    height:100%;
-  }
-  video{
-    transform:scaleX(-1);
-    object-fit:fill;
-    background:#000;
-  }
-  canvas{
-    pointer-events:none;
-  }
-  .hud{
-    position:absolute;
-    inset:0;
-    pointer-events:none;
-    display:flex;
-    flex-direction:column;
-    justify-content:space-between;
-    padding:12px;
-  }
-  .hud-top{
-    display:flex;
-    align-items:flex-start;
-    justify-content:space-between;
-    gap:10px;
-  }
-  .badge{
-    background:rgba(0,0,0,.62);
-    border:1px solid rgba(255,255,255,.16);
-    backdrop-filter:blur(7px);
-    border-radius:12px;
-    padding:8px 11px;
-    font-weight:700;
-    font-size:clamp(13px,1.8vw,18px);
-    line-height:1.25;
-  }
-  .accel-on{color:#ff8c86}
-  .accel-off{color:#d3d4d8}
-  .message{
-    align-self:center;
-    margin-bottom:4%;
-    font-size:clamp(22px,4.5vw,52px);
-    font-weight:900;
-    text-shadow:0 3px 18px #000,0 1px 2px #000;
-    opacity:0;
-    transform:scale(.94);
-    transition:opacity .15s ease, transform .15s ease;
-  }
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif}
+  .app{width:min(1120px,100%);margin:0 auto;padding:12px 12px 28px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+  .title{font-size:clamp(20px,3vw,30px);font-weight:800}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:clamp(15px,2vw,20px);font-weight:700}
+  .legend span{display:inline-flex;align-items:center;gap:7px}.dot{width:13px;height:13px;border-radius:999px;display:inline-block}.blue{background:var(--blue)}.red{background:var(--red)}
+  .stage{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden;border-radius:18px;border:1px solid #2b2c31}
+  video,canvas{position:absolute;inset:0;width:100%;height:100%}
+  video{transform:scaleX(-1);object-fit:fill;background:#000}
+  #playbackVideo{display:none}
+  .stage.playback #liveVideo{display:none}.stage.playback #playbackVideo{display:block}
+  canvas{pointer-events:none}
+  .hud{position:absolute;inset:0;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:12px}
+  .hud-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .badge{background:rgba(0,0,0,.64);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(7px);border-radius:12px;padding:8px 11px;font-weight:750;font-size:clamp(13px,1.8vw,18px);line-height:1.25}
+  .accel-on{color:#ff8c86}.accel-off{color:#d3d4d8}
+  .record-badge{display:none;color:#fff}.record-badge.show{display:block}.rec-dot{display:inline-block;width:11px;height:11px;margin-right:7px;border-radius:50%;background:var(--rec);animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .message{align-self:center;margin-bottom:4%;font-size:clamp(22px,4.5vw,52px);font-weight:900;text-shadow:0 3px 18px #000,0 1px 2px #000;opacity:0;transform:scale(.94);transition:opacity .15s ease,transform .15s ease}
   .message.show{opacity:1;transform:scale(1)}
-
-  .controls{
-    margin-top:12px;
-    display:flex;
-    gap:10px;
-    flex-wrap:wrap;
-    align-items:center;
-  }
-  button{
-    appearance:none;
-    border:0;
-    border-radius:12px;
-    min-height:48px;
-    padding:11px 18px;
-    font-size:17px;
-    font-weight:800;
-    cursor:pointer;
-    background:#f2f2f3;
-    color:#111;
-  }
-  button.secondary{
-    background:#292b31;
-    color:#fff;
-    border:1px solid #3b3d45;
-  }
-  button.red{
-    background:#3a2020;
-    color:#ffd2cf;
-    border:1px solid #6c2c28;
-  }
-  button:disabled{opacity:.5;cursor:default}
-  .statusline{
-    margin-left:auto;
-    color:var(--muted);
-    font-size:14px;
-    min-width:180px;
-    text-align:right;
-  }
-
-  details{
-    margin-top:10px;
-    background:var(--panel);
-    border:1px solid var(--line);
-    border-radius:14px;
-    padding:10px 12px;
-  }
-  summary{cursor:pointer;font-weight:800}
-  .settings{
-    display:grid;
-    grid-template-columns:repeat(2,minmax(220px,1fr));
-    gap:12px 18px;
-    margin-top:12px;
-  }
-  .setting label{
-    display:flex;
-    justify-content:space-between;
-    gap:10px;
-    font-size:14px;
-    color:var(--muted);
-    margin-bottom:5px;
-  }
-
-  .range-hints{
-    display:flex;
-    justify-content:space-between;
-    gap:12px;
-    margin-top:4px;
-    color:#aeb3bd;
-    font-size:12px;
-    font-weight:650;
-  }
-  input[type="range"]{width:100%}
-  .note{
-    color:var(--muted);
-    font-size:13px;
-    line-height:1.55;
-    margin-top:8px;
-  }
-
-  @media (max-width:700px){
-    .app{padding:8px 8px 22px}
-    .stage{border-radius:12px}
-    .settings{grid-template-columns:1fr}
-    .statusline{width:100%;margin-left:0;text-align:left}
-    button{flex:1 1 auto}
-    .hud{padding:8px}
-    .badge{padding:6px 8px}
-  }
-  @media (prefers-reduced-motion:reduce){
-    .message{transition:none}
-  }
+  .progress{position:absolute;left:0;bottom:0;height:7px;width:0;background:var(--rec);transition:width .08s linear}
+  .controls{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  button{appearance:none;border:0;border-radius:12px;min-height:48px;padding:11px 18px;font-size:17px;font-weight:800;cursor:pointer;background:#f2f2f3;color:#111}
+  button.secondary{background:#292b31;color:#fff;border:1px solid #3b3d45}button.red{background:#3a2020;color:#ffd2cf;border:1px solid #6c2c28}button.record{background:#d92f2a;color:#fff}button.play{background:#195f35;color:#eafff0;border:1px solid #287b49}button:disabled{opacity:.42;cursor:default}
+  .statusline{margin-left:auto;color:var(--muted);font-size:14px;min-width:220px;text-align:right}
+  details{margin-top:10px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}summary{cursor:pointer;font-weight:800}
+  .settings{display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:12px 18px;margin-top:12px}.setting label{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--muted);margin-bottom:5px}.range-hints{display:flex;justify-content:space-between;gap:12px;margin-top:4px;color:#aeb3bd;font-size:12px;font-weight:650}input[type="range"]{width:100%}
+  .note{color:var(--muted);font-size:13px;line-height:1.6;margin-top:9px}
+  .record-info{margin-top:10px;display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;background:#111216;border:1px solid var(--line);border-radius:12px;padding:9px 11px;color:var(--muted);font-size:13px}.record-info strong{color:var(--text)}
+  @media(max-width:760px){.app{padding:8px 8px 22px}.stage{border-radius:12px}.settings{grid-template-columns:1fr}.statusline{width:100%;margin-left:0;text-align:left}button{flex:1 1 auto}.hud{padding:8px}.badge{padding:6px 8px}.record-info{grid-template-columns:1fr}}
+  @media(prefers-reduced-motion:reduce){.message{transition:none}.rec-dot{animation:none}}
 </style>
 </head>
 <body>
 <main class="app">
   <div class="topbar">
     <div class="title">手の速度・加速度ベクトル</div>
-    <div class="legend" aria-label="ベクトルの凡例">
-      <span><i class="dot blue"></i>速度 v</span>
-      <span><i class="dot red"></i>加速度 a</span>
-    </div>
+    <div class="legend"><span><i class="dot blue"></i>速度 v</span><span><i class="dot red"></i>加速度 a</span></div>
   </div>
 
   <section class="stage" id="stage">
-    <video id="video" autoplay playsinline muted></video>
+    <video id="liveVideo" autoplay playsinline muted></video>
+    <video id="playbackVideo" playsinline muted></video>
     <canvas id="canvas"></canvas>
-
     <div class="hud">
       <div class="hud-top">
-        <div class="badge" id="accelBadge">加速度表示：<span class="accel-off">OFF</span></div>
+        <div class="badge" id="accelBadge">加速度表示：<span class="accel-on">ON</span></div>
+        <div class="badge record-badge" id="recordBadge"><span class="rec-dot"></span><span id="recordText">記録中 5.0 s</span></div>
       </div>
       <div class="message" id="message"></div>
     </div>
+    <div class="progress" id="recordProgress"></div>
   </section>
 
   <div class="controls">
     <button id="startBtn">カメラ開始</button>
+    <button class="record" id="recordBtn" disabled>● 5秒記録</button>
+    <button class="play" id="playBtn" disabled>▶ 再生</button>
+    <button class="secondary" id="pauseBtn" disabled>⏸ 一時停止</button>
+    <button class="secondary" id="liveBtn" disabled>ライブに戻る</button>
     <button class="secondary" id="toggleBtn" disabled>加速度 ON / OFF</button>
-    <button class="secondary" id="resetBtn" disabled>ベクトルをリセット</button>
-    <button class="red" id="stopBtn" disabled>停止</button>
+    <button class="red" id="stopBtn" disabled>カメラ停止</button>
     <div class="statusline" id="status">未開始</div>
   </div>
 
-  <details>
-    <summary>表示調整</summary>
+  <details open>
+    <summary>表示・平滑化調整</summary>
     <div class="settings">
       <div class="setting">
-        <label for="vScale"><span>速度ベクトル倍率</span><span id="vScaleValue">1.00</span></label>
-        <input id="vScale" type="range" min="0.35" max="2.2" step="0.05" value="1">
+        <label for="vScale"><span>速度ベクトル倍率</span><span id="vScaleValue">2.00</span></label>
+        <input id="vScale" type="range" min="0.35" max="4" step="0.05" value="2">
       </div>
       <div class="setting">
         <label for="aScale"><span>加速度ベクトル倍率</span><span id="aScaleValue">1.00</span></label>
-        <input id="aScale" type="range" min="0.25" max="2.5" step="0.05" value="1">
+        <input id="aScale" type="range" min="0.1" max="2.5" step="0.05" value="1">
       </div>
       <div class="setting">
-        <label for="smoothScale"><span>平滑化の強さ</span><span id="smoothScaleValue">60%</span></label>
-        <input id="smoothScale" type="range" min="0" max="100" step="1" value="60">
+        <label for="smoothScale"><span>平滑化の強さ</span><span id="smoothScaleValue">20%</span></label>
+        <input id="smoothScale" type="range" min="0" max="100" step="1" value="20">
         <div class="range-hints"><span>反応が速い</span><span>なめらか</span></div>
       </div>
     </div>
+    <div class="record-info">
+      <span><strong>5秒記録：</strong>カメラ映像と手の位置を同時に保存。再生時は録画データ全体を前後方向に平滑化してから v・a を再計算します。</span>
+      <span id="clipInfo">記録なし</span>
+    </div>
     <div class="note">
-      矢印はカメラ画像上の位置変化から求めた相対ベクトルです。実空間の m/s・m/s² への較正はしていません。<br>
-      加速度は微分ノイズが大きいため、位置→速度→加速度の順に平滑化しています。「平滑化の強さ」で、反応の速さと安定性のバランスを授業中に調整できます。
+      初期値：加速度 ON、速度倍率 2.00、加速度倍率 1.00、平滑化 20%。<br>
+      ライブ表示は因果的な平滑化、録画再生は前後のデータを使う対称平滑化です。そのため再生時は時間遅れを抑えつつ、特に加速度ベクトルを滑らかにできます。矢印はカメラ画像上の相対ベクトルで、m/s・m/s²への較正はしていません。
     </div>
   </details>
 </main>
 
 <script type="module">
-import {
-  FilesetResolver,
-  HandLandmarker
-} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
+import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
 
-const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
-const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
+const MODEL_URL="https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+const WASM_URL="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
+const RECORD_SECONDS=5;
+const PLAYBACK_FPS=60;
+const MAX_INTERP_GAP=0.20;
+const V_ARROW_TIME=0.105;
+const A_ARROW_TIME2=0.085;
+const TRACK_GAP_RESET_MS=260;
 
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
-const stage = document.getElementById("stage");
-const startBtn = document.getElementById("startBtn");
-const toggleBtn = document.getElementById("toggleBtn");
-const resetBtn = document.getElementById("resetBtn");
-const stopBtn = document.getElementById("stopBtn");
-const statusEl = document.getElementById("status");
-const accelBadge = document.getElementById("accelBadge");
-const message = document.getElementById("message");
-const vScale = document.getElementById("vScale");
-const aScale = document.getElementById("aScale");
-const smoothScale = document.getElementById("smoothScale");
-const vScaleValue = document.getElementById("vScaleValue");
-const aScaleValue = document.getElementById("aScaleValue");
-const smoothScaleValue = document.getElementById("smoothScaleValue");
+const liveVideo=document.getElementById("liveVideo");
+const playbackVideo=document.getElementById("playbackVideo");
+const canvas=document.getElementById("canvas");
+const ctx=canvas.getContext("2d");
+const stage=document.getElementById("stage");
+const startBtn=document.getElementById("startBtn");
+const recordBtn=document.getElementById("recordBtn");
+const playBtn=document.getElementById("playBtn");
+const pauseBtn=document.getElementById("pauseBtn");
+const liveBtn=document.getElementById("liveBtn");
+const toggleBtn=document.getElementById("toggleBtn");
+const stopBtn=document.getElementById("stopBtn");
+const statusEl=document.getElementById("status");
+const accelBadge=document.getElementById("accelBadge");
+const message=document.getElementById("message");
+const recordBadge=document.getElementById("recordBadge");
+const recordText=document.getElementById("recordText");
+const recordProgress=document.getElementById("recordProgress");
+const clipInfo=document.getElementById("clipInfo");
+const vScale=document.getElementById("vScale");
+const aScale=document.getElementById("aScale");
+const smoothScale=document.getElementById("smoothScale");
+const vScaleValue=document.getElementById("vScaleValue");
+const aScaleValue=document.getElementById("aScaleValue");
+const smoothScaleValue=document.getElementById("smoothScaleValue");
 
-let handLandmarker = null;
-let stream = null;
-let running = false;
-let rafId = null;
-let lastInferenceMs = 0;
-let lastVideoTime = -1;
-let showAcceleration = false;
-let messageTimer = null;
+let handLandmarker=null;
+let stream=null;
+let running=false;
+let rafId=null;
+let lastInferenceMs=0;
+let lastVideoTime=-1;
+let showAcceleration=true;
+let messageTimer=null;
+let mode="live";
 
-// iPad / iPhone は少し推論間隔を広げる
-const ua = navigator.userAgent || "";
-const isIOSLike = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-const INFERENCE_INTERVAL_MS = isIOSLike ? 72 : 52;
+const ua=navigator.userAgent||"";
+const isIOSLike=/iPad|iPhone|iPod/.test(ua)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const INFERENCE_INTERVAL_MS=isIOSLike?72:52;
 
-// 運動量計算用状態
-let filteredPos = null;
-let previousPos = null;
-let previousVel = {x:0,y:0};
-let filteredVel = {x:0,y:0};
-let filteredAcc = {x:0,y:0};
-let previousSampleMs = null;
-let lastSeenMs = null;
+let filteredPos=null,previousPos=null,previousSampleMs=null,lastSeenMs=null;
+let previousVel={x:0,y:0},filteredVel={x:0,y:0},filteredAcc={x:0,y:0};
 
-// 平滑化係数。スライダーが大きいほど alpha を小さくして、よりなめらかにする。
-function smoothingAlphas(){
-  const strength = Number(smoothScale.value) / 100;
-  return {
-    pos: lerp(0.80, 0.20, strength),
-    vel: lerp(0.65, 0.08, strength),
-    acc: lerp(0.45, 0.03, strength)
-  };
+let mediaRecorder=null;
+let mediaChunks=[];
+let recording=false;
+let recordStartPerf=0;
+let recordStopTimer=null;
+let recordUiRaf=null;
+let recordSamples=[];
+let recordedDuration=0;
+let recordedBlob=null;
+let playbackUrl=null;
+let processedFrames=[];
+let processedDt=1/PLAYBACK_FPS;
+let lastProcessedStrength=null;
+
+function setStatus(t){statusEl.textContent=t}
+function lerp(a,b,t){return a+(b-a)*t}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
+function lerpPoint(a,b,t){return{x:lerp(a.x,b.x,t),y:lerp(a.y,b.y,t)}}
+function magnitude(v){return Math.hypot(v.x,v.y)}
+function smoothingAlphas(){const s=Number(smoothScale.value)/100;return{pos:lerp(.80,.20,s),vel:lerp(.65,.08,s),acc:lerp(.45,.03,s)}}
+
+function updateAccelBadge(){accelBadge.innerHTML=showAcceleration?'加速度表示：<span class="accel-on">ON</span>':'加速度表示：<span class="accel-off">OFF</span>'}
+function flashMessage(t){clearTimeout(messageTimer);message.textContent=t;message.classList.add("show");messageTimer=setTimeout(()=>message.classList.remove("show"),1000)}
+function toggleAcceleration(){showAcceleration=!showAcceleration;updateAccelBadge();filteredAcc={x:0,y:0};flashMessage(showAcceleration?"加速度 ON":"加速度 OFF")}
+
+function resetMotion(){filteredPos=null;previousPos=null;previousSampleMs=null;lastSeenMs=null;previousVel={x:0,y:0};filteredVel={x:0,y:0};filteredAcc={x:0,y:0};ctx.clearRect(0,0,canvas.width,canvas.height)}
+
+function palmCenterNormalized(landmarks){
+  const ids=[0,5,9,13,17];let x=0,y=0;
+  for(const i of ids){x+=landmarks[i].x;y+=landmarks[i].y}
+  x/=ids.length;y/=ids.length;
+  return{x:1-x,y};
 }
-const TRACK_GAP_RESET_MS = 260;
+function normalizedToPixels(p){return{x:p.x*canvas.width,y:p.y*canvas.height}}
 
-// ベクトル表示の基準倍率
-const V_ARROW_TIME = 0.105;   // v(px/s) × この値 → 矢印長(px)
-const A_ARROW_TIME2 = 0.085;  // a(px/s^2) × この値 → 矢印長(px)（初期版の10倍）
-
-
-function setStatus(text){
-  statusEl.textContent = text;
-}
-
-function lerp(a,b,t){ return a + (b-a)*t; }
-function lerpPoint(a,b,t){ return {x:lerp(a.x,b.x,t), y:lerp(a.y,b.y,t)}; }
-
-function resetMotion(){
-  filteredPos = null;
-  previousPos = null;
-  previousVel = {x:0,y:0};
-  filteredVel = {x:0,y:0};
-  filteredAcc = {x:0,y:0};
-  previousSampleMs = null;
-  lastSeenMs = null;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-}
-
-function updateAccelBadge(){
-  accelBadge.innerHTML = showAcceleration
-    ? '加速度表示：<span class="accel-on">ON</span>'
-    : '加速度表示：<span class="accel-off">OFF</span>';
-}
-
-function flashMessage(text){
-  clearTimeout(messageTimer);
-  message.textContent = text;
-  message.classList.add("show");
-  messageTimer = setTimeout(() => message.classList.remove("show"), 1100);
-}
-
-function toggleAcceleration(){
-  showAcceleration = !showAcceleration;
-  updateAccelBadge();
-  flashMessage(showAcceleration ? "加速度 ON" : "加速度 OFF");
-  // 表示切り替え直後の見かけ上の跳ねを避ける
-  filteredAcc = {x:0,y:0};
-}
-
-function palmCenter(landmarks){
-  // 手首 + 4つの指の付け根。指の開閉による中心移動を抑える。
-  const ids = [0,5,9,13,17];
-  let x=0, y=0;
-  for(const i of ids){ x += landmarks[i].x; y += landmarks[i].y; }
-  x /= ids.length;
-  y /= ids.length;
-  return {
-    x:(1-x)*canvas.width, // 鏡表示に合わせる
-    y:y*canvas.height
-  };
+function updateMotion(rawPos,now){
+  if(lastSeenMs!==null&&now-lastSeenMs>TRACK_GAP_RESET_MS)resetMotion();
+  lastSeenMs=now;
+  if(!filteredPos){filteredPos={...rawPos};previousPos={...rawPos};previousSampleMs=now;return}
+  const alpha=smoothingAlphas();
+  filteredPos=lerpPoint(filteredPos,rawPos,alpha.pos);
+  const dt=(now-previousSampleMs)/1000;
+  if(dt<.018)return;
+  if(dt>.22){previousPos={...filteredPos};previousSampleMs=now;previousVel={x:0,y:0};filteredVel={x:0,y:0};filteredAcc={x:0,y:0};return}
+  const rawVel={x:(filteredPos.x-previousPos.x)/dt,y:(filteredPos.y-previousPos.y)/dt};
+  const newVel={x:lerp(filteredVel.x,rawVel.x,alpha.vel),y:lerp(filteredVel.y,rawVel.y,alpha.vel)};
+  const rawAcc={x:(newVel.x-previousVel.x)/dt,y:(newVel.y-previousVel.y)/dt};
+  filteredAcc={x:lerp(filteredAcc.x,rawAcc.x,alpha.acc),y:lerp(filteredAcc.y,rawAcc.y,alpha.acc)};
+  previousVel={...newVel};filteredVel=newVel;previousPos={...filteredPos};previousSampleMs=now;
 }
 
-function updateMotion(rawPos, now){
-  if(lastSeenMs !== null && now - lastSeenMs > TRACK_GAP_RESET_MS){
-    resetMotion();
-  }
-  lastSeenMs = now;
-
-  if(!filteredPos){
-    filteredPos = {...rawPos};
-    previousPos = {...rawPos};
-    previousSampleMs = now;
-    return;
-  }
-
-  const alpha = smoothingAlphas();
-  filteredPos = lerpPoint(filteredPos, rawPos, alpha.pos);
-  const dt = (now - previousSampleMs)/1000;
-  if(dt < 0.018) return;
-  if(dt > 0.22){
-    previousPos = {...filteredPos};
-    previousSampleMs = now;
-    previousVel = {x:0,y:0};
-    filteredVel = {x:0,y:0};
-    filteredAcc = {x:0,y:0};
-    return;
-  }
-
-  const rawVel = {
-    x:(filteredPos.x - previousPos.x)/dt,
-    y:(filteredPos.y - previousPos.y)/dt
-  };
-
-  const newVel = {
-    x:lerp(filteredVel.x, rawVel.x, alpha.vel),
-    y:lerp(filteredVel.y, rawVel.y, alpha.vel)
-  };
-
-  const rawAcc = {
-    x:(newVel.x - previousVel.x)/dt,
-    y:(newVel.y - previousVel.y)/dt
-  };
-
-  filteredAcc = {
-    x:lerp(filteredAcc.x, rawAcc.x, alpha.acc),
-    y:lerp(filteredAcc.y, rawAcc.y, alpha.acc)
-  };
-
-  previousVel = {...newVel};
-  filteredVel = newVel;
-  previousPos = {...filteredPos};
-  previousSampleMs = now;
+function clampVector(v,maxLen){const m=magnitude(v);if(m<=maxLen||m===0)return v;const s=maxLen/m;return{x:v.x*s,y:v.y*s}}
+function drawArrow(start,vec,color,label,minLen=7){
+  const v=clampVector(vec,Math.min(canvas.width,canvas.height)*.46);const len=magnitude(v);if(len<minLen)return;
+  const end={x:start.x+v.x,y:start.y+v.y};const angle=Math.atan2(v.y,v.x);const head=Math.max(13,Math.min(28,len*.22));const lw=Math.max(5,Math.min(10,canvas.width/150));
+  ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=lw;ctx.lineCap="round";ctx.lineJoin="round";ctx.shadowColor="rgba(0,0,0,.55)";ctx.shadowBlur=5;
+  ctx.beginPath();ctx.moveTo(start.x,start.y);ctx.lineTo(end.x,end.y);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(end.x,end.y);ctx.lineTo(end.x-head*Math.cos(angle-Math.PI/7),end.y-head*Math.sin(angle-Math.PI/7));ctx.lineTo(end.x-head*Math.cos(angle+Math.PI/7),end.y-head*Math.sin(angle+Math.PI/7));ctx.closePath();ctx.fill();
+  const fs=Math.max(22,Math.min(40,canvas.width/34));ctx.font=`900 ${fs}px -apple-system,BlinkMacSystemFont,sans-serif`;ctx.textAlign="center";ctx.textBaseline="middle";ctx.lineWidth=7;ctx.strokeStyle="rgba(0,0,0,.8)";const tx=end.x+Math.cos(angle)*24,ty=end.y+Math.sin(angle)*24;ctx.strokeText(label,tx,ty);ctx.fillStyle=color;ctx.fillText(label,tx,ty);ctx.restore();
 }
-
-function vectorMagnitude(v){ return Math.hypot(v.x,v.y); }
-
-function clampVector(v, maxLen){
-  const m = vectorMagnitude(v);
-  if(m <= maxLen || m === 0) return v;
-  const s = maxLen/m;
-  return {x:v.x*s,y:v.y*s};
+function drawVectors(pos,vel,acc){
+  ctx.clearRect(0,0,canvas.width,canvas.height);if(!pos)return;
+  ctx.save();ctx.beginPath();ctx.arc(pos.x,pos.y,10,0,Math.PI*2);ctx.fillStyle="rgba(255,255,255,.95)";ctx.fill();ctx.lineWidth=3;ctx.strokeStyle="rgba(0,0,0,.75)";ctx.stroke();ctx.restore();
+  const vv={x:vel.x*V_ARROW_TIME*Number(vScale.value),y:vel.y*V_ARROW_TIME*Number(vScale.value)};drawArrow(pos,vv,"#1683ff","v",8);
+  if(showAcceleration){const aa={x:acc.x*A_ARROW_TIME2*Number(aScale.value),y:acc.y*A_ARROW_TIME2*Number(aScale.value)};drawArrow(pos,aa,"#ff3b30","a",9)}
 }
-
-function drawArrow(start, vec, color, label, minLen=7){
-  let v = clampVector(vec, Math.min(canvas.width,canvas.height)*0.46);
-  const len = vectorMagnitude(v);
-  if(len < minLen) return;
-
-  const end = {x:start.x+v.x, y:start.y+v.y};
-  const angle = Math.atan2(v.y,v.x);
-  const head = Math.max(13, Math.min(28, len*0.22));
-  const lineWidth = Math.max(5, Math.min(10, canvas.width/150));
-
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.shadowColor = "rgba(0,0,0,.55)";
-  ctx.shadowBlur = 5;
-
-  ctx.beginPath();
-  ctx.moveTo(start.x,start.y);
-  ctx.lineTo(end.x,end.y);
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(end.x,end.y);
-  ctx.lineTo(end.x - head*Math.cos(angle-Math.PI/7), end.y - head*Math.sin(angle-Math.PI/7));
-  ctx.lineTo(end.x - head*Math.cos(angle+Math.PI/7), end.y - head*Math.sin(angle+Math.PI/7));
-  ctx.closePath();
-  ctx.fill();
-
-  const fs = Math.max(22,Math.min(40,canvas.width/34));
-  ctx.font = `900 ${fs}px -apple-system, BlinkMacSystemFont, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.lineWidth = 7;
-  ctx.strokeStyle = "rgba(0,0,0,.8)";
-  const tx = end.x + Math.cos(angle)*24;
-  const ty = end.y + Math.sin(angle)*24;
-  ctx.strokeText(label,tx,ty);
-  ctx.fillStyle = color;
-  ctx.fillText(label,tx,ty);
-  ctx.restore();
-}
-
-function drawFrame(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  if(!filteredPos) return;
-
-  // 手の中心
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(filteredPos.x,filteredPos.y,10,0,Math.PI*2);
-  ctx.fillStyle = "rgba(255,255,255,.95)";
-  ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = "rgba(0,0,0,.75)";
-  ctx.stroke();
-  ctx.restore();
-
-  const velScaleFactor = Number(vScale.value);
-  const accScaleFactor = Number(aScale.value);
-
-  const vVec = {
-    x:filteredVel.x * V_ARROW_TIME * velScaleFactor,
-    y:filteredVel.y * V_ARROW_TIME * velScaleFactor
-  };
-  drawArrow(filteredPos,vVec,"#1683ff","v",8);
-
-  if(showAcceleration){
-    const aVec = {
-      x:filteredAcc.x * A_ARROW_TIME2 * accScaleFactor,
-      y:filteredAcc.y * A_ARROW_TIME2 * accScaleFactor
-    };
-    drawArrow(filteredPos,aVec,"#ff3b30","a",9);
-  }
-}
+function drawLiveFrame(){drawVectors(filteredPos,filteredVel,filteredAcc)}
 
 async function initHandLandmarker(){
-  if(handLandmarker) return;
-  setStatus("手の認識モデルを読み込み中…");
-  const vision = await FilesetResolver.forVisionTasks(WASM_URL);
-
-  const options = {
-    baseOptions:{ modelAssetPath:MODEL_URL, delegate:"GPU" },
-    runningMode:"VIDEO",
-    numHands:1,
-    minHandDetectionConfidence:0.55,
-    minHandPresenceConfidence:0.55,
-    minTrackingConfidence:0.55
-  };
-
-  try{
-    handLandmarker = await HandLandmarker.createFromOptions(vision,options);
-  }catch(err){
-    console.warn("GPU delegate unavailable. Falling back to CPU.",err);
-    options.baseOptions.delegate = "CPU";
-    handLandmarker = await HandLandmarker.createFromOptions(vision,options);
-  }
+  if(handLandmarker)return;setStatus("手の認識モデルを読み込み中…");
+  const vision=await FilesetResolver.forVisionTasks(WASM_URL);
+  const options={baseOptions:{modelAssetPath:MODEL_URL,delegate:"GPU"},runningMode:"VIDEO",numHands:1,minHandDetectionConfidence:.55,minHandPresenceConfidence:.55,minTrackingConfidence:.55};
+  try{handLandmarker=await HandLandmarker.createFromOptions(vision,options)}catch(e){console.warn(e);options.baseOptions.delegate="CPU";handLandmarker=await HandLandmarker.createFromOptions(vision,options)}
 }
 
 async function startCamera(){
-  if(running) return;
-  startBtn.disabled = true;
+  if(running)return;startBtn.disabled=true;
   try{
-    await initHandLandmarker();
-    setStatus("カメラを起動中…");
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{
-        facingMode:"user",
-        width:{ideal:1280},
-        height:{ideal:720},
-        frameRate:{ideal:30,max:60}
-      },
-      audio:false
-    });
-    video.srcObject = stream;
-    await video.play();
-
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    stage.style.aspectRatio = `${canvas.width} / ${canvas.height}`;
-
-    running = true;
-    toggleBtn.disabled = false;
-    resetBtn.disabled = false;
-    stopBtn.disabled = false;
-    startBtn.textContent = "カメラ動作中";
-    setStatus(`追跡中（${isIOSLike ? "iPad/iPhone向け" : "Mac/PC向け"}設定）`);
-    resetMotion();
-    loop();
-  }catch(err){
-    console.error(err);
-    setStatus("カメラを開始できません。Safari/Chromeのカメラ許可を確認してください。");
-    startBtn.disabled = false;
-  }
+    await initHandLandmarker();setStatus("カメラを起動中…");
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:60}},audio:false});
+    liveVideo.srcObject=stream;await liveVideo.play();
+    canvas.width=liveVideo.videoWidth||1280;canvas.height=liveVideo.videoHeight||720;stage.style.aspectRatio=`${canvas.width} / ${canvas.height}`;
+    running=true;mode="live";stage.classList.remove("playback");resetMotion();
+    startBtn.textContent="カメラ動作中";recordBtn.disabled=!supportsMediaRecording();toggleBtn.disabled=false;stopBtn.disabled=false;liveBtn.disabled=true;
+    setStatus(supportsMediaRecording()?"手を追跡中":"このブラウザは映像記録に未対応です");loop();
+  }catch(e){console.error(e);setStatus("カメラを開始できません。Safari/Chromeのカメラ許可を確認してください。");startBtn.disabled=false}
 }
 
 function stopCamera(){
-  running = false;
-  if(rafId) cancelAnimationFrame(rafId);
-  rafId = null;
-  if(stream){
-    for(const track of stream.getTracks()) track.stop();
-    stream = null;
+  if(recording)return;
+  running=false;if(rafId)cancelAnimationFrame(rafId);rafId=null;
+  if(stream){for(const t of stream.getTracks())t.stop();stream=null}
+  liveVideo.srcObject=null;resetMotion();startBtn.disabled=false;startBtn.textContent="カメラ開始";recordBtn.disabled=true;toggleBtn.disabled=true;stopBtn.disabled=true;liveBtn.disabled=recordedBlob===null;setStatus("カメラ停止中。記録済み映像は再生できます。")
+}
+
+function supportsMediaRecording(){return typeof MediaRecorder!=="undefined"&&!!stream}
+function chooseMimeType(){
+  const mp4=["video/mp4;codecs=avc1.42E01E","video/mp4"];
+  const webm=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+  const list=isIOSLike?[...mp4,...webm]:[...webm,...mp4];
+  return list.find(t=>MediaRecorder.isTypeSupported?.(t))||"";
+}
+
+function updateRecordUi(){
+  if(!recording)return;const elapsed=(performance.now()-recordStartPerf)/1000;const remain=Math.max(0,RECORD_SECONDS-elapsed);recordText.textContent=`記録中 ${remain.toFixed(1)} s`;recordProgress.style.width=`${clamp(elapsed/RECORD_SECONDS*100,0,100)}%`;setStatus(`記録中… ${remain.toFixed(1)} 秒`);recordUiRaf=requestAnimationFrame(updateRecordUi)
+}
+
+function clearPreviousRecording(){
+  if(playbackUrl){URL.revokeObjectURL(playbackUrl);playbackUrl=null}
+  recordedBlob=null;processedFrames=[];recordSamples=[];recordedDuration=0;lastProcessedStrength=null;playbackVideo.removeAttribute("src");playbackVideo.load();playBtn.disabled=true;pauseBtn.disabled=true;clipInfo.textContent="記録なし"
+}
+
+function startRecording(){
+  if(!running||!stream||recording||!supportsMediaRecording())return;
+  switchToLive(false);clearPreviousRecording();
+  const mime=chooseMimeType();const options={videoBitsPerSecond:2500000};if(mime)options.mimeType=mime;
+  try{mediaRecorder=new MediaRecorder(stream,options)}catch(e){console.error(e);setStatus("このブラウザでは録画形式を開始できませんでした");return}
+  mediaChunks=[];recordSamples=[];mediaRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)mediaChunks.push(e.data)};
+  mediaRecorder.onerror=e=>{console.error(e);finishRecordingUi();setStatus("録画中にエラーが発生しました")};
+  mediaRecorder.onstop=finalizeRecording;
+  try{mediaRecorder.start(200)}catch(e){console.error(e);setStatus("録画を開始できませんでした");return}
+  recordStartPerf=performance.now();recording=true;recordBadge.classList.add("show");recordProgress.style.width="0%";recordBtn.disabled=true;playBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;flashMessage("5秒 記録スタート");updateRecordUi();
+  recordStopTimer=setTimeout(()=>{if(mediaRecorder&&mediaRecorder.state!=="inactive")mediaRecorder.stop()},RECORD_SECONDS*1000);
+}
+
+function finishRecordingUi(){
+  recording=false;clearTimeout(recordStopTimer);recordStopTimer=null;if(recordUiRaf)cancelAnimationFrame(recordUiRaf);recordUiRaf=null;recordBadge.classList.remove("show");recordProgress.style.width="0%";recordBtn.disabled=!running;stopBtn.disabled=!running
+}
+
+async function finalizeRecording(){
+  recordedDuration=Math.min(RECORD_SECONDS,(performance.now()-recordStartPerf)/1000);finishRecordingUi();
+  if(mediaChunks.length===0){setStatus("録画データを作れませんでした");return}
+  const type=mediaRecorder?.mimeType||mediaChunks[0]?.type||"video/mp4";recordedBlob=new Blob(mediaChunks,{type});playbackUrl=URL.createObjectURL(recordedBlob);playbackVideo.src=playbackUrl;playbackVideo.load();
+  try{await waitForMetadata(playbackVideo)}catch(e){console.warn(e)}
+  preparePlaybackData();playBtn.disabled=false;liveBtn.disabled=false;clipInfo.textContent=`記録済み：約 ${recordedDuration.toFixed(1)} 秒 / ${recordSamples.filter(s=>s.valid).length} 点`;setStatus("5秒記録完了。『再生』で録画映像＋平滑化ベクトルを確認できます。");flashMessage("記録完了")
+}
+
+function waitForMetadata(v){return new Promise((resolve,reject)=>{if(v.readyState>=1){resolve();return}const ok=()=>{cleanup();resolve()};const ng=()=>{cleanup();reject(new Error("metadata error"))};const cleanup=()=>{v.removeEventListener("loadedmetadata",ok);v.removeEventListener("error",ng)};v.addEventListener("loadedmetadata",ok,{once:true});v.addEventListener("error",ng,{once:true})})}
+
+function recordTrackingSample(now,norm){
+  if(!recording||!norm)return;
+  const t=(now-recordStartPerf)/1000;
+  if(t<-.05||t>RECORD_SECONDS+.15)return;
+  // 短い認識落ちは、前後の有効点を補間して吸収する。長い認識落ちは MAX_INTERP_GAP で自動的に空白になる。
+  recordSamples.push({t:Math.max(0,t),valid:true,x:norm.x,y:norm.y});
+}
+
+function gaussianKernel(sigma){
+  const radius=Math.max(1,Math.ceil(sigma*3));const k=[];let sum=0;for(let i=-radius;i<=radius;i++){const w=Math.exp(-(i*i)/(2*sigma*sigma));k.push(w);sum+=w}return k.map(x=>x/sum)
+}
+function smoothArray(values,sigma){
+  if(values.length<3||sigma<=.1)return values.slice();const k=gaussianKernel(sigma),r=(k.length-1)/2,out=new Array(values.length);
+  for(let i=0;i<values.length;i++){let s=0,w=0;for(let j=-r;j<=r;j++){const q=clamp(i+j,0,values.length-1);s+=values[q]*k[j+r];w+=k[j+r]}out[i]=s/w}return out
+}
+
+function resampleRecording(){
+  const dt=1/PLAYBACK_FPS;const n=Math.max(2,Math.floor(recordedDuration/dt)+1);const out=new Array(n).fill(null);if(recordSamples.length<2)return{dt,points:out};
+  let j=0;
+  for(let i=0;i<n;i++){
+    const t=i*dt;while(j+1<recordSamples.length&&recordSamples[j+1].t<t)j++;
+    const a=recordSamples[j],b=recordSamples[Math.min(j+1,recordSamples.length-1)];
+    if(!a||!b||!a.valid||!b.valid||b.t-a.t>MAX_INTERP_GAP||t<a.t-.001||t>b.t+.001)continue;
+    const u=b.t===a.t?0:clamp((t-a.t)/(b.t-a.t),0,1);out[i]={x:lerp(a.x,b.x,u)*canvas.width,y:lerp(a.y,b.y,u)*canvas.height};
   }
-  video.srcObject = null;
-  resetMotion();
-  startBtn.disabled = false;
-  startBtn.textContent = "カメラ開始";
-  toggleBtn.disabled = true;
-  resetBtn.disabled = true;
-  stopBtn.disabled = true;
-  setStatus("停止中");
+  return{dt,points:out}
+}
+
+function preparePlaybackData(){
+  if(!recordedBlob||recordSamples.length<2)return;
+  const strength=Number(smoothScale.value);const {dt,points}=resampleRecording();processedDt=dt;processedFrames=new Array(points.length).fill(null);
+  const baseSigma=lerp(1.4,12,strength/100);
+  let start=0;
+  while(start<points.length){while(start<points.length&&!points[start])start++;if(start>=points.length)break;let end=start;while(end+1<points.length&&points[end+1])end++;
+    const len=end-start+1;if(len>=5){
+      const xs=[],ys=[];for(let i=start;i<=end;i++){xs.push(points[i].x);ys.push(points[i].y)}
+      const sx=smoothArray(xs,baseSigma),sy=smoothArray(ys,baseSigma);const vx=new Array(len).fill(0),vy=new Array(len).fill(0);
+      for(let i=0;i<len;i++){const lo=Math.max(0,i-1),hi=Math.min(len-1,i+1),den=(hi-lo)*dt||dt;vx[i]=(sx[hi]-sx[lo])/den;vy[i]=(sy[hi]-sy[lo])/den}
+      const svx=smoothArray(vx,Math.max(.7,baseSigma*.7)),svy=smoothArray(vy,Math.max(.7,baseSigma*.7));const ax=new Array(len).fill(0),ay=new Array(len).fill(0);
+      for(let i=0;i<len;i++){const lo=Math.max(0,i-1),hi=Math.min(len-1,i+1),den=(hi-lo)*dt||dt;ax[i]=(svx[hi]-svx[lo])/den;ay[i]=(svy[hi]-svy[lo])/den}
+      const sax=smoothArray(ax,Math.max(1,baseSigma*1.15)),say=smoothArray(ay,Math.max(1,baseSigma*1.15));
+      for(let i=0;i<len;i++)processedFrames[start+i]={pos:{x:sx[i],y:sy[i]},vel:{x:svx[i],y:svy[i]},acc:{x:sax[i],y:say[i]}};
+    }
+    start=end+1;
+  }
+  lastProcessedStrength=strength;
+}
+
+function playbackFrameAt(t){
+  if(!processedFrames.length)return null;const f=clamp(t/processedDt,0,processedFrames.length-1),i=Math.floor(f),j=Math.min(processedFrames.length-1,i+1),u=f-i,a=processedFrames[i],b=processedFrames[j];if(!a||!b)return a||b||null;
+  return{pos:lerpPoint(a.pos,b.pos,u),vel:lerpPoint(a.vel,b.vel,u),acc:lerpPoint(a.acc,b.acc,u)}
+}
+function drawPlaybackFrame(){const f=playbackFrameAt(playbackVideo.currentTime||0);if(f)drawVectors(f.pos,f.vel,f.acc);else ctx.clearRect(0,0,canvas.width,canvas.height)}
+
+async function playRecording(){
+  if(!recordedBlob)return;if(lastProcessedStrength!==Number(smoothScale.value))preparePlaybackData();
+  mode="playback";stage.classList.add("playback");liveBtn.disabled=false;pauseBtn.disabled=false;recordBtn.disabled=true;
+  if(!rafId)loop();
+  if(playbackVideo.ended||playbackVideo.currentTime>=Math.max(0,(playbackVideo.duration||recordedDuration)-.04))playbackVideo.currentTime=0;
+  try{await playbackVideo.play();setStatus(`録画再生中：平滑化 ${smoothScale.value}%`)}catch(e){console.error(e);setStatus("再生を開始できませんでした")}
+}
+function pausePlayback(){if(!recordedBlob)return;playbackVideo.pause();mode="playbackPaused";pauseBtn.disabled=true;setStatus(`一時停止 ${playbackVideo.currentTime.toFixed(1)} s`);drawPlaybackFrame()}
+function switchToLive(reset=true){
+  playbackVideo.pause();mode="live";stage.classList.remove("playback");pauseBtn.disabled=true;liveBtn.disabled=true;if(running){recordBtn.disabled=false;setStatus("ライブ表示");if(reset)resetMotion()}ctx.clearRect(0,0,canvas.width,canvas.height)
 }
 
 function loop(){
-  if(!running) return;
-  const now = performance.now();
-
-  if(video.readyState >= 2 && now - lastInferenceMs >= INFERENCE_INTERVAL_MS && video.currentTime !== lastVideoTime){
-    lastInferenceMs = now;
-    lastVideoTime = video.currentTime;
-
-    try{
-      const result = handLandmarker.detectForVideo(video,now);
-      if(result.landmarks && result.landmarks.length > 0){
-        const landmarks = result.landmarks[0];
-        const p = palmCenter(landmarks);
-        updateMotion(p,now);
-
-        setStatus("手を追跡中");
-      }else{
-        if(lastSeenMs !== null && now - lastSeenMs > TRACK_GAP_RESET_MS){
-          resetMotion();
-        }
-        setStatus("手をカメラに映してください");
-      }
-    }catch(err){
-      console.warn(err);
+  if(!running&&mode==="live"){rafId=null;return}
+  const now=performance.now();
+  if(mode==="live"){
+    if(running&&liveVideo.readyState>=2&&now-lastInferenceMs>=INFERENCE_INTERVAL_MS&&liveVideo.currentTime!==lastVideoTime){
+      lastInferenceMs=now;lastVideoTime=liveVideo.currentTime;
+      try{
+        const result=handLandmarker.detectForVideo(liveVideo,now);
+        if(result.landmarks&&result.landmarks.length){const norm=palmCenterNormalized(result.landmarks[0]);const p=normalizedToPixels(norm);updateMotion(p,now);recordTrackingSample(now,norm);if(!recording)setStatus("手を追跡中")}
+        else{recordTrackingSample(now,null);if(lastSeenMs!==null&&now-lastSeenMs>TRACK_GAP_RESET_MS)resetMotion();if(!recording)setStatus("手をカメラに映してください")}
+      }catch(e){console.warn(e)}
     }
-  }
-
-  drawFrame();
-  rafId = requestAnimationFrame(loop);
+    drawLiveFrame();
+  }else{drawPlaybackFrame()}
+  rafId=requestAnimationFrame(loop)
 }
 
-startBtn.addEventListener("click",startCamera);
-stopBtn.addEventListener("click",stopCamera);
-toggleBtn.addEventListener("click",toggleAcceleration);
-resetBtn.addEventListener("click",()=>{
-  resetMotion();
-  flashMessage("ベクトルをリセット");
-});
-
-vScale.addEventListener("input",()=>{ vScaleValue.textContent = Number(vScale.value).toFixed(2); });
-aScale.addEventListener("input",()=>{ aScaleValue.textContent = Number(aScale.value).toFixed(2); });
-smoothScale.addEventListener("input",()=>{
-  smoothScaleValue.textContent = `${Number(smoothScale.value)}%`;
-});
-
-
-window.addEventListener("pagehide",()=>{
-  if(stream){ for(const track of stream.getTracks()) track.stop(); }
-});
+startBtn.addEventListener("click",startCamera);recordBtn.addEventListener("click",startRecording);playBtn.addEventListener("click",playRecording);pauseBtn.addEventListener("click",pausePlayback);liveBtn.addEventListener("click",()=>switchToLive(true));toggleBtn.addEventListener("click",toggleAcceleration);stopBtn.addEventListener("click",stopCamera);
+playbackVideo.addEventListener("ended",()=>{mode="playbackPaused";pauseBtn.disabled=true;setStatus("再生終了。『再生』でもう一度見られます。");drawPlaybackFrame()});
+playbackVideo.addEventListener("pause",()=>{if(mode==="playback")pauseBtn.disabled=true});
+playbackVideo.addEventListener("play",()=>{pauseBtn.disabled=false});
+vScale.addEventListener("input",()=>{vScaleValue.textContent=Number(vScale.value).toFixed(2)});
+aScale.addEventListener("input",()=>{aScaleValue.textContent=Number(aScale.value).toFixed(2)});
+smoothScale.addEventListener("input",()=>{smoothScaleValue.textContent=`${Number(smoothScale.value)}%`;if(recordedBlob){preparePlaybackData();if(mode!=="live")drawPlaybackFrame()}});
+window.addEventListener("pagehide",()=>{if(playbackUrl)URL.revokeObjectURL(playbackUrl);if(stream){for(const t of stream.getTracks())t.stop()}});
 
 updateAccelBadge();
 </script>
