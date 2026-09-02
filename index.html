@@ -32,6 +32,7 @@
   @keyframes pulse{50%{opacity:.35}}
   .message{align-self:center;margin-bottom:4%;font-size:clamp(22px,4.5vw,52px);font-weight:900;text-shadow:0 3px 18px #000,0 1px 2px #000;opacity:0;transform:scale(.94);transition:opacity .15s ease,transform .15s ease}
   .message.show{opacity:1;transform:scale(1)}
+  .message.countdown{position:absolute;inset:0;margin:0;display:flex;align-items:center;justify-content:center;font-size:clamp(110px,22vw,260px);line-height:1;font-variant-numeric:tabular-nums}
   .progress{position:absolute;left:0;bottom:0;height:7px;width:0;background:var(--rec);transition:width .08s linear}
   .controls{margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   button{appearance:none;border:0;border-radius:12px;min-height:48px;padding:11px 18px;font-size:17px;font-weight:800;cursor:pointer;background:#f2f2f3;color:#111}
@@ -48,13 +49,13 @@
   .graphs-note{font-size:12px;color:var(--muted)}
   .graph-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
   .graph-card{min-width:0;background:#111216;border:1px solid var(--line);border-radius:13px;padding:8px 9px 7px}
-  .graph-title{font-family:"STIX Two Text","Times New Roman",Times,serif;font-size:20px;font-weight:700;line-height:1;text-align:center;margin:1px 0 5px;letter-spacing:.01em}
+  .graph-title{font-family:"STIX Two Text","Times New Roman",Times,serif;font-size:40px;font-weight:700;line-height:1;text-align:center;margin:1px 0 5px;letter-spacing:.01em}
   .graph-title i{font-style:italic}.graph-title sub{font-size:.62em;vertical-align:-.28em;line-height:0}
   .graph-plot{position:relative;width:100%;height:178px;overflow:hidden;border-radius:7px}
   .graph-plot canvas{display:block;position:static;width:100%;height:100%;pointer-events:none}
   .graph-playhead{display:none;position:absolute;top:7px;bottom:22px;width:2px;background:#ffd60a;box-shadow:0 0 0 1px rgba(0,0,0,.32);pointer-events:none;transform:translateX(-1px)}
   .graphs.playing .graph-playhead,.graphs.paused .graph-playhead{display:block}
-  @media(max-width:760px){.app{padding:8px 8px 22px}.stage{border-radius:12px}.settings{grid-template-columns:1fr}.statusline{width:100%;margin-left:0;text-align:left}button{flex:1 1 auto}.hud{padding:8px}.badge{padding:6px 8px}.record-info{grid-template-columns:1fr}.graph-grid{gap:8px}.graph-card{padding:7px 6px 5px}.graph-title{font-size:18px}.graph-plot{height:145px}}
+  @media(max-width:760px){.app{padding:8px 8px 22px}.stage{border-radius:12px}.settings{grid-template-columns:1fr}.statusline{width:100%;margin-left:0;text-align:left}button{flex:1 1 auto}.hud{padding:8px}.badge{padding:6px 8px}.record-info{grid-template-columns:1fr}.graph-grid{gap:8px}.graph-card{padding:7px 6px 5px}.graph-title{font-size:36px}.graph-plot{height:145px}}
   @media(prefers-reduced-motion:reduce){.message{transition:none}.rec-dot{animation:none}}
 </style>
 </head>
@@ -123,7 +124,7 @@
     </div>
   </section>
 
-  <details open>
+  <details>
     <summary>表示・平滑化調整</summary>
     <div class="settings">
       <div class="setting">
@@ -137,17 +138,9 @@
       <div class="setting">
         <label for="smoothScale"><span>平滑化の強さ</span><span id="smoothScaleValue">20%</span></label>
         <input id="smoothScale" type="range" min="0" max="100" step="1" value="20">
-        <div class="range-hints"><span>反応が速い</span><span>なめらか</span></div>
       </div>
     </div>
-    <div class="record-info">
-      <span><strong>5秒記録：</strong>カメラ映像と手の位置を同時に保存。再生時は録画データ全体を前後方向に平滑化してから v・a を再計算します。</span>
-      <span id="clipInfo">記録なし</span>
-    </div>
-    <div class="note">
-      初期値：加速度 ON、速度倍率 2.00、加速度倍率 1.00、平滑化 20%。<br>
-      ライブ表示は因果的な平滑化、録画再生は前後のデータを使う対称平滑化です。そのため再生時は時間遅れを抑えつつ、特に加速度ベクトルを滑らかにできます。矢印はカメラ画像上の相対ベクトルで、m/s・m/s²への較正はしていません。
-    </div>
+    <span id="clipInfo" hidden>記録なし</span>
   </details>
 </main>
 
@@ -216,6 +209,7 @@ let previousVel={x:0,y:0},filteredVel={x:0,y:0},filteredAcc={x:0,y:0};
 let mediaRecorder=null;
 let mediaChunks=[];
 let recording=false;
+let countingDown=false;
 let recordStartPerf=0;
 let recordStopTimer=null;
 let recordUiRaf=null;
@@ -235,7 +229,20 @@ function magnitude(v){return Math.hypot(v.x,v.y)}
 function smoothingAlphas(){const s=Number(smoothScale.value)/100;return{pos:lerp(.80,.20,s),vel:lerp(.65,.08,s),acc:lerp(.45,.03,s)}}
 
 function updateAccelBadge(){accelBadge.innerHTML=showAcceleration?'加速度表示：<span class="accel-on">ON</span>':'加速度表示：<span class="accel-off">OFF</span>'}
-function flashMessage(t){clearTimeout(messageTimer);message.textContent=t;message.classList.add("show");messageTimer=setTimeout(()=>message.classList.remove("show"),1000)}
+function flashMessage(t){clearTimeout(messageTimer);message.classList.remove("countdown");message.textContent=t;message.classList.add("show");messageTimer=setTimeout(()=>message.classList.remove("show"),1000)}
+function wait(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+async function runRecordCountdown(){
+  countingDown=true;
+  recordBtn.disabled=true;playBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;
+  clearTimeout(messageTimer);
+  for(let n=3;n>=1;n--){
+    if(!running||!stream){countingDown=false;message.classList.remove("show","countdown");return false}
+    message.textContent=String(n);message.classList.add("show","countdown");setStatus(`記録開始まで ${n}`);
+    await wait(1000);
+  }
+  message.classList.remove("show","countdown");countingDown=false;
+  return running&&!!stream;
+}
 function toggleAcceleration(){showAcceleration=!showAcceleration;updateAccelBadge();filteredAcc={x:0,y:0};flashMessage(showAcceleration?"加速度 ON":"加速度 OFF")}
 
 function resetMotion(){filteredPos=null;previousPos=null;previousSampleMs=null;lastSeenMs=null;previousVel={x:0,y:0};filteredVel={x:0,y:0};filteredAcc={x:0,y:0};ctx.clearRect(0,0,canvas.width,canvas.height)}
@@ -302,7 +309,7 @@ async function startCamera(){
 }
 
 function stopCamera(){
-  if(recording)return;
+  if(recording||countingDown)return;
   running=false;if(rafId)cancelAnimationFrame(rafId);rafId=null;
   if(stream){for(const t of stream.getTracks())t.stop();stream=null}
   liveVideo.srcObject=null;resetMotion();startBtn.disabled=false;startBtn.textContent="カメラ開始";recordBtn.disabled=true;toggleBtn.disabled=true;stopBtn.disabled=true;liveBtn.disabled=recordedBlob===null;setStatus("カメラ停止中。記録済み映像は再生できます。")
@@ -325,16 +332,18 @@ function clearPreviousRecording(){
   recordedBlob=null;processedFrames=[];recordSamples=[];recordedDuration=0;lastProcessedStrength=null;playbackVideo.removeAttribute("src");playbackVideo.load();playBtn.disabled=true;pauseBtn.disabled=true;clipInfo.textContent="記録なし";graphsSection.classList.remove("show","playing","paused")
 }
 
-function startRecording(){
-  if(!running||!stream||recording||!supportsMediaRecording())return;
+async function startRecording(){
+  if(!running||!stream||recording||countingDown||!supportsMediaRecording())return;
   switchToLive(false);clearPreviousRecording();
+  const ready=await runRecordCountdown();
+  if(!ready){recordBtn.disabled=!running;stopBtn.disabled=!running;return}
   const mime=chooseMimeType();const options={videoBitsPerSecond:2500000};if(mime)options.mimeType=mime;
-  try{mediaRecorder=new MediaRecorder(stream,options)}catch(e){console.error(e);setStatus("このブラウザでは録画形式を開始できませんでした");return}
+  try{mediaRecorder=new MediaRecorder(stream,options)}catch(e){console.error(e);setStatus("このブラウザでは録画形式を開始できませんでした");recordBtn.disabled=!running;stopBtn.disabled=!running;return}
   mediaChunks=[];recordSamples=[];mediaRecorder.ondataavailable=e=>{if(e.data&&e.data.size>0)mediaChunks.push(e.data)};
   mediaRecorder.onerror=e=>{console.error(e);finishRecordingUi();setStatus("録画中にエラーが発生しました")};
   mediaRecorder.onstop=finalizeRecording;
-  try{mediaRecorder.start(200)}catch(e){console.error(e);setStatus("録画を開始できませんでした");return}
-  recordStartPerf=performance.now();recording=true;recordBadge.classList.add("show");recordProgress.style.width="0%";recordBtn.disabled=true;playBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;flashMessage("5秒 記録スタート");updateRecordUi();
+  try{mediaRecorder.start(200)}catch(e){console.error(e);setStatus("録画を開始できませんでした");recordBtn.disabled=!running;stopBtn.disabled=!running;return}
+  recordStartPerf=performance.now();recording=true;recordBadge.classList.add("show");recordProgress.style.width="0%";recordBtn.disabled=true;playBtn.disabled=true;liveBtn.disabled=true;stopBtn.disabled=true;flashMessage("記録開始");updateRecordUi();
   recordStopTimer=setTimeout(()=>{if(mediaRecorder&&mediaRecorder.state!=="inactive")mediaRecorder.stop()},RECORD_SECONDS*1000);
 }
 
@@ -485,8 +494,8 @@ function loop(){
       lastInferenceMs=now;lastVideoTime=liveVideo.currentTime;
       try{
         const result=handLandmarker.detectForVideo(liveVideo,now);
-        if(result.landmarks&&result.landmarks.length){const norm=palmCenterNormalized(result.landmarks[0]);const p=normalizedToPixels(norm);updateMotion(p,now);recordTrackingSample(now,norm);if(!recording)setStatus("手を追跡中")}
-        else{recordTrackingSample(now,null);if(lastSeenMs!==null&&now-lastSeenMs>TRACK_GAP_RESET_MS)resetMotion();if(!recording)setStatus("手をカメラに映してください")}
+        if(result.landmarks&&result.landmarks.length){const norm=palmCenterNormalized(result.landmarks[0]);const p=normalizedToPixels(norm);updateMotion(p,now);recordTrackingSample(now,norm);if(!recording&&!countingDown)setStatus("手を追跡中")}
+        else{recordTrackingSample(now,null);if(lastSeenMs!==null&&now-lastSeenMs>TRACK_GAP_RESET_MS)resetMotion();if(!recording&&!countingDown)setStatus("手をカメラに映してください")}
       }catch(e){console.warn(e)}
     }
     drawLiveFrame();
