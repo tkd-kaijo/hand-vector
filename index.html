@@ -104,26 +104,6 @@
   }
   .accel-on{color:#ff8c86}
   .accel-off{color:#d3d4d8}
-  .gesture-progress{
-    display:flex;
-    gap:6px;
-    align-items:center;
-    flex-wrap:wrap;
-  }
-  .step{
-    min-width:39px;
-    text-align:center;
-    padding:5px 8px;
-    border-radius:9px;
-    background:rgba(255,255,255,.08);
-    border:1px solid rgba(255,255,255,.16);
-    opacity:.55;
-  }
-  .step.done{
-    opacity:1;
-    border-color:rgba(255,255,255,.75);
-    background:rgba(255,255,255,.18);
-  }
   .message{
     align-self:center;
     margin-bottom:4%;
@@ -196,6 +176,16 @@
     color:var(--muted);
     margin-bottom:5px;
   }
+
+  .range-hints{
+    display:flex;
+    justify-content:space-between;
+    gap:12px;
+    margin-top:4px;
+    color:#aeb3bd;
+    font-size:12px;
+    font-weight:650;
+  }
   input[type="range"]{width:100%}
   .note{
     color:var(--muted);
@@ -235,11 +225,6 @@
     <div class="hud">
       <div class="hud-top">
         <div class="badge" id="accelBadge">加速度表示：<span class="accel-off">OFF</span></div>
-        <div class="badge gesture-progress" aria-label="ジェスチャー進行状況">
-          <span class="step" id="g1">✊</span><span>→</span>
-          <span class="step" id="g2">✋</span><span>→</span>
-          <span class="step" id="g3">✊</span>
-        </div>
       </div>
       <div class="message" id="message"></div>
     </div>
@@ -264,10 +249,15 @@
         <label for="aScale"><span>加速度ベクトル倍率</span><span id="aScaleValue">1.00</span></label>
         <input id="aScale" type="range" min="0.25" max="2.5" step="0.05" value="1">
       </div>
+      <div class="setting">
+        <label for="smoothScale"><span>平滑化の強さ</span><span id="smoothScaleValue">60%</span></label>
+        <input id="smoothScale" type="range" min="0" max="100" step="1" value="60">
+        <div class="range-hints"><span>反応が速い</span><span>なめらか</span></div>
+      </div>
     </div>
     <div class="note">
       矢印はカメラ画像上の位置変化から求めた相対ベクトルです。実空間の m/s・m/s² への較正はしていません。<br>
-      加速度は微分ノイズが大きいため、位置→速度→加速度の順に平滑化しています。Aキーでも加速度表示を切り替えられます。
+      加速度は微分ノイズが大きいため、位置→速度→加速度の順に平滑化しています。「平滑化の強さ」で、反応の速さと安定性のバランスを授業中に調整できます。
     </div>
   </details>
 </main>
@@ -275,10 +265,10 @@
 <script type="module">
 import {
   FilesetResolver,
-  GestureRecognizer
+  HandLandmarker
 } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm";
 
-const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/1/gesture_recognizer.task";
+const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
 const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 
 const video = document.getElementById("video");
@@ -292,15 +282,14 @@ const stopBtn = document.getElementById("stopBtn");
 const statusEl = document.getElementById("status");
 const accelBadge = document.getElementById("accelBadge");
 const message = document.getElementById("message");
-const g1 = document.getElementById("g1");
-const g2 = document.getElementById("g2");
-const g3 = document.getElementById("g3");
 const vScale = document.getElementById("vScale");
 const aScale = document.getElementById("aScale");
+const smoothScale = document.getElementById("smoothScale");
 const vScaleValue = document.getElementById("vScaleValue");
 const aScaleValue = document.getElementById("aScaleValue");
+const smoothScaleValue = document.getElementById("smoothScaleValue");
 
-let recognizer = null;
+let handLandmarker = null;
 let stream = null;
 let running = false;
 let rafId = null;
@@ -323,26 +312,21 @@ let filteredAcc = {x:0,y:0};
 let previousSampleMs = null;
 let lastSeenMs = null;
 
-// 平滑化係数（0に近いほどなめらか、1に近いほど反応が速い）
-const POS_ALPHA = 0.48;
-const VEL_ALPHA = 0.30;
-const ACC_ALPHA = 0.16;
+// 平滑化係数。スライダーが大きいほど alpha を小さくして、よりなめらかにする。
+function smoothingAlphas(){
+  const strength = Number(smoothScale.value) / 100;
+  return {
+    pos: lerp(0.80, 0.20, strength),
+    vel: lerp(0.65, 0.08, strength),
+    acc: lerp(0.45, 0.03, strength)
+  };
+}
 const TRACK_GAP_RESET_MS = 260;
 
 // ベクトル表示の基準倍率
 const V_ARROW_TIME = 0.105;   // v(px/s) × この値 → 矢印長(px)
-const A_ARROW_TIME2 = 0.085; // a(px/s^2) × この値 → 矢印長(px)
+const A_ARROW_TIME2 = 0.085;  // a(px/s^2) × この値 → 矢印長(px)（初期版の10倍）
 
-// G → P → G ジェスチャー状態
-let gestureStage = 0; // 0:待機, 1:最初のG済み, 2:P済み
-let gestureDeadline = 0;
-let cooldownUntil = 0;
-let gestureCandidate = "None";
-let gestureCandidateSince = 0;
-let stableGesture = "None";
-const GESTURE_SCORE_MIN = 0.64;
-const GESTURE_STABLE_MS = 170;
-const GESTURE_STEP_TIMEOUT_MS = 2600;
 
 function setStatus(text){
   statusEl.textContent = text;
@@ -375,80 +359,12 @@ function flashMessage(text){
   messageTimer = setTimeout(() => message.classList.remove("show"), 1100);
 }
 
-function toggleAcceleration(source="button"){
+function toggleAcceleration(){
   showAcceleration = !showAcceleration;
   updateAccelBadge();
   flashMessage(showAcceleration ? "加速度 ON" : "加速度 OFF");
-  if(source === "gesture"){
-    // 切り替え直後の指の開閉で加速度が跳ねるのを少し軽減
-    filteredAcc = {x:0,y:0};
-  }
-}
-
-function updateGestureUI(){
-  g1.classList.toggle("done", gestureStage >= 1);
-  g2.classList.toggle("done", gestureStage >= 2);
-  g3.classList.toggle("done", false);
-}
-
-function resetGestureSequence(){
-  gestureStage = 0;
-  gestureDeadline = 0;
-  updateGestureUI();
-}
-
-function processStableGesture(name, now){
-  if(now < cooldownUntil) return;
-
-  if(gestureStage > 0 && now > gestureDeadline){
-    resetGestureSequence();
-  }
-
-  if(gestureStage === 0){
-    if(name === "Closed_Fist"){
-      gestureStage = 1;
-      gestureDeadline = now + GESTURE_STEP_TIMEOUT_MS;
-      updateGestureUI();
-    }
-    return;
-  }
-
-  if(gestureStage === 1){
-    if(name === "Open_Palm"){
-      gestureStage = 2;
-      gestureDeadline = now + GESTURE_STEP_TIMEOUT_MS;
-      updateGestureUI();
-    }
-    return;
-  }
-
-  if(gestureStage === 2 && name === "Closed_Fist"){
-    g3.classList.add("done");
-    toggleAcceleration("gesture");
-    cooldownUntil = now + 1400;
-    setTimeout(resetGestureSequence, 650);
-  }
-}
-
-function updateGestureRecognition(name, score, now){
-  const accepted = score >= GESTURE_SCORE_MIN && (name === "Closed_Fist" || name === "Open_Palm");
-  const current = accepted ? name : "None";
-
-  if(current !== gestureCandidate){
-    gestureCandidate = current;
-    gestureCandidateSince = now;
-    return;
-  }
-
-  if(current !== stableGesture && now - gestureCandidateSince >= GESTURE_STABLE_MS){
-    stableGesture = current;
-    processStableGesture(stableGesture, now);
-  }
-
-  // 同じ安定ジェスチャーが続いている場合もタイムアウト監視だけ行う
-  if(gestureStage > 0 && now > gestureDeadline){
-    resetGestureSequence();
-  }
+  // 表示切り替え直後の見かけ上の跳ねを避ける
+  filteredAcc = {x:0,y:0};
 }
 
 function palmCenter(landmarks){
@@ -477,7 +393,8 @@ function updateMotion(rawPos, now){
     return;
   }
 
-  filteredPos = lerpPoint(filteredPos, rawPos, POS_ALPHA);
+  const alpha = smoothingAlphas();
+  filteredPos = lerpPoint(filteredPos, rawPos, alpha.pos);
   const dt = (now - previousSampleMs)/1000;
   if(dt < 0.018) return;
   if(dt > 0.22){
@@ -495,8 +412,8 @@ function updateMotion(rawPos, now){
   };
 
   const newVel = {
-    x:lerp(filteredVel.x, rawVel.x, VEL_ALPHA),
-    y:lerp(filteredVel.y, rawVel.y, VEL_ALPHA)
+    x:lerp(filteredVel.x, rawVel.x, alpha.vel),
+    y:lerp(filteredVel.y, rawVel.y, alpha.vel)
   };
 
   const rawAcc = {
@@ -505,8 +422,8 @@ function updateMotion(rawPos, now){
   };
 
   filteredAcc = {
-    x:lerp(filteredAcc.x, rawAcc.x, ACC_ALPHA),
-    y:lerp(filteredAcc.y, rawAcc.y, ACC_ALPHA)
+    x:lerp(filteredAcc.x, rawAcc.x, alpha.acc),
+    y:lerp(filteredAcc.y, rawAcc.y, alpha.acc)
   };
 
   previousVel = {...newVel};
@@ -602,8 +519,8 @@ function drawFrame(){
   }
 }
 
-async function initRecognizer(){
-  if(recognizer) return;
+async function initHandLandmarker(){
+  if(handLandmarker) return;
   setStatus("手の認識モデルを読み込み中…");
   const vision = await FilesetResolver.forVisionTasks(WASM_URL);
 
@@ -617,11 +534,11 @@ async function initRecognizer(){
   };
 
   try{
-    recognizer = await GestureRecognizer.createFromOptions(vision,options);
+    handLandmarker = await HandLandmarker.createFromOptions(vision,options);
   }catch(err){
     console.warn("GPU delegate unavailable. Falling back to CPU.",err);
     options.baseOptions.delegate = "CPU";
-    recognizer = await GestureRecognizer.createFromOptions(vision,options);
+    handLandmarker = await HandLandmarker.createFromOptions(vision,options);
   }
 }
 
@@ -629,7 +546,7 @@ async function startCamera(){
   if(running) return;
   startBtn.disabled = true;
   try{
-    await initRecognizer();
+    await initHandLandmarker();
     setStatus("カメラを起動中…");
     stream = await navigator.mediaDevices.getUserMedia({
       video:{
@@ -654,7 +571,6 @@ async function startCamera(){
     startBtn.textContent = "カメラ動作中";
     setStatus(`追跡中（${isIOSLike ? "iPad/iPhone向け" : "Mac/PC向け"}設定）`);
     resetMotion();
-    resetGestureSequence();
     loop();
   }catch(err){
     console.error(err);
@@ -673,7 +589,6 @@ function stopCamera(){
   }
   video.srcObject = null;
   resetMotion();
-  resetGestureSequence();
   startBtn.disabled = false;
   startBtn.textContent = "カメラ開始";
   toggleBtn.disabled = true;
@@ -691,25 +606,17 @@ function loop(){
     lastVideoTime = video.currentTime;
 
     try{
-      const result = recognizer.recognizeForVideo(video,now);
+      const result = handLandmarker.detectForVideo(video,now);
       if(result.landmarks && result.landmarks.length > 0){
         const landmarks = result.landmarks[0];
         const p = palmCenter(landmarks);
         updateMotion(p,now);
 
-        let gestureName = "None";
-        let gestureScore = 0;
-        if(result.gestures && result.gestures[0] && result.gestures[0][0]){
-          gestureName = result.gestures[0][0].categoryName || "None";
-          gestureScore = result.gestures[0][0].score || 0;
-        }
-        updateGestureRecognition(gestureName,gestureScore,now);
-        setStatus(`手を追跡中 / ${gestureName === "Closed_Fist" ? "グー" : gestureName === "Open_Palm" ? "パー" : "-"}`);
+        setStatus("手を追跡中");
       }else{
         if(lastSeenMs !== null && now - lastSeenMs > TRACK_GAP_RESET_MS){
           resetMotion();
         }
-        updateGestureRecognition("None",0,now);
         setStatus("手をカメラに映してください");
       }
     }catch(err){
@@ -723,7 +630,7 @@ function loop(){
 
 startBtn.addEventListener("click",startCamera);
 stopBtn.addEventListener("click",stopCamera);
-toggleBtn.addEventListener("click",()=>toggleAcceleration("button"));
+toggleBtn.addEventListener("click",toggleAcceleration);
 resetBtn.addEventListener("click",()=>{
   resetMotion();
   flashMessage("ベクトルをリセット");
@@ -731,19 +638,16 @@ resetBtn.addEventListener("click",()=>{
 
 vScale.addEventListener("input",()=>{ vScaleValue.textContent = Number(vScale.value).toFixed(2); });
 aScale.addEventListener("input",()=>{ aScaleValue.textContent = Number(aScale.value).toFixed(2); });
-
-window.addEventListener("keydown",(e)=>{
-  if((e.key === "a" || e.key === "A") && running && document.activeElement?.tagName !== "INPUT"){
-    toggleAcceleration("keyboard");
-  }
+smoothScale.addEventListener("input",()=>{
+  smoothScaleValue.textContent = `${Number(smoothScale.value)}%`;
 });
+
 
 window.addEventListener("pagehide",()=>{
   if(stream){ for(const track of stream.getTracks()) track.stop(); }
 });
 
 updateAccelBadge();
-updateGestureUI();
 </script>
 </body>
 </html>
