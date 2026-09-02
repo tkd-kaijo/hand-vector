@@ -444,11 +444,11 @@ function drawGraph(c,series,key,scale,unit,color){
   const M={l:43,r:10,t:12,b:25},pw=Math.max(1,w-M.l-M.r),ph=Math.max(1,h-M.t-M.b),tMax=Math.max(.1,recordedDuration||RECORD_SECONDS);
   const X=t=>M.l+clamp(t/tMax,0,1)*pw,Y=v=>M.t+(scale-v)/(2*scale)*ph;
   g.font='11px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';g.textBaseline="middle";
-  g.strokeStyle="#262932";g.lineWidth=1;
+  g.strokeStyle="#262932";g.lineWidth=2;
   for(let s=0;s<=Math.ceil(tMax);s++){const x=X(Math.min(s,tMax));g.beginPath();g.moveTo(x,M.t);g.lineTo(x,M.t+ph);g.stroke();g.fillStyle="#8f949e";g.textAlign="center";g.fillText(String(s),x,h-9)}
   for(const q of [-1,-.5,0,.5,1]){const y=Y(q*scale);g.beginPath();g.moveTo(M.l,y);g.lineTo(M.l+pw,y);g.stroke()}
-  g.strokeStyle="#727782";g.lineWidth=1.2;g.beginPath();g.moveTo(M.l,Y(0));g.lineTo(M.l+pw,Y(0));g.stroke();
-  g.fillStyle="#aeb3bd";g.textAlign="right";g.fillText(formatGraphNumber(scale),M.l-5,Y(scale));g.fillText("0",M.l-5,Y(0));g.fillText(formatGraphNumber(-scale),M.l-5,Y(-scale));
+  g.strokeStyle="#727782";g.lineWidth=2.4;g.beginPath();g.moveTo(M.l,Y(0));g.lineTo(M.l+pw,Y(0));g.stroke();
+  g.fillStyle="#aeb3bd";g.textAlign="right";g.fillText(formatGraphNumber(scale),M.l-5,Y(scale));g.save();g.font='33px -apple-system,BlinkMacSystemFont,"Hiragino Sans",sans-serif';g.fillText("0",M.l-5,Y(0));g.restore();g.fillText(formatGraphNumber(-scale),M.l-5,Y(-scale));
   g.textAlign="right";g.textBaseline="top";g.fillStyle="#aeb3bd";g.fillText(`±${formatGraphNumber(scale)} ${unit}`,w-M.r,M.t+2);
   g.textAlign="right";g.textBaseline="alphabetic";g.fillText("t (s)",w-M.r,h-4);
   g.strokeStyle=color;g.lineWidth=2.4;g.lineJoin="round";g.lineCap="round";let started=false;g.beginPath();
